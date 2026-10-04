@@ -1,16 +1,10 @@
 package main
 
 import (
-	"archive/zip"
 	"database/sql"
-	"io"
 	"log/slog"
 	"os"
-	"path/filepath"
-	"runtime"
-	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/disgoorg/disgo/events"
@@ -93,49 +87,6 @@ func timezoneCommand(
 	)
 }
 
-var timezoneNames []string
-var timezoneOnce sync.Once
-
-func getTimezoneNames() []string {
-	timezoneOnce.Do(func() {
-		path := filepath.Join(
-			runtime.GOROOT(),
-			"lib",
-			"time",
-			"zoneinfo.zip",
-		)
-
-		reader, err := zip.OpenReader(path)
-		if err != nil {
-			slog.Error(
-				"failed to open timezone database",
-				slog.Any("err", err),
-			)
-			return
-		}
-		defer reader.Close()
-
-		for _, file := range reader.File {
-			name := file.Name
-
-			if strings.HasSuffix(name, "/") {
-				continue
-			}
-
-			// zoneinfo.zip entries have this prefix.
-			name = strings.TrimPrefix(name, "zoneinfo/")
-
-			if strings.Contains(name, "/") {
-				timezoneNames = append(timezoneNames, name)
-			}
-		}
-
-		sort.Strings(timezoneNames)
-	})
-
-	return timezoneNames
-}
-
 func timezoneAutocomplete(
 	ctx *BotContext,
 	event *events.AutocompleteInteractionCreate,
@@ -143,16 +94,15 @@ func timezoneAutocomplete(
 ) []string {
 	value := strings.ToLower(args["timezone"])
 
-	names := getTimezoneNames()
-
 	choices := make([]string, 0, 25)
 
-	for _, name := range names {
-		if !strings.HasPrefix(strings.ToLower(name), value) {
+	for i, name := range TimezoneNamesLowercase {
+		if !strings.Contains(name, value) {
 			continue
 		}
 
-		choices = append(choices, name)
+		choices = append(choices, TimezoneNames[i])
+
 		if len(choices) >= 25 {
 			break
 		}
@@ -162,25 +112,6 @@ func timezoneAutocomplete(
 }
 
 func main() {
-	//----------
-	// Setup logging
-	logFile, err := os.OpenFile(
-		"sibyl.log",
-		os.O_CREATE|os.O_WRONLY|os.O_APPEND,
-		0644,
-	)
-	if err != nil {
-		panic(err)
-	}
-	defer logFile.Close()
-
-	logger := slog.New(slog.NewTextHandler(
-		io.MultiWriter(os.Stdout, logFile),
-		&slog.HandlerOptions{},
-	))
-
-	slog.SetDefault(logger)
-
 	ctx := &BotContext{}
 
 	//----------
