@@ -1,0 +1,20 @@
+name: Deploy to GitHub Pages (Issue Comment)
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  call:
+    if: >-
+      github.event.issue.number == 1 &&
+      github.event.issue.pull_request == null &&
+      github.event.comment.body == '/deploy'
+      
+    uses: ./.github/workflows/deploy-reusable.yml
+    secrets: inherit

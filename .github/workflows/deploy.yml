@@ -1,0 +1,16 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  
+jobs:
+  call:
+    uses: ./.github/workflows/deploy-reusable.yml
+    secrets: inherit
