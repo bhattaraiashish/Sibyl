@@ -14,6 +14,10 @@ type Title struct {
 	Romaji  string
 }
 
+type StreamingEpisode struct {
+	Title string
+}
+
 type Media struct {
 	Id                int
 	Title             Title
@@ -25,6 +29,7 @@ type Media struct {
 	StartDate         StartDate
 	Studios           StudioConnection
 	NextAiringEpisode *AiringSchedule
+	StreamingEpisodes []StreamingEpisode
 }
 
 type AiringSchedule struct {
@@ -155,6 +160,9 @@ func GetAnime(
 				nextAiringEpisode {
 					episode
 					airingAt
+				}
+				streamingEpisodes {
+					title
 				}
 			}
 		}

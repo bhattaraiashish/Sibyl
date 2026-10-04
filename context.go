@@ -596,7 +596,7 @@ func (b *MessageBuilder) SendComponent(
 
 func HasRole(
 	ctx *BotContext,
-	member discord.Member,
+	member *discord.Member,
 	guildID snowflake.ID,
 	name string,
 ) bool {
@@ -637,6 +637,7 @@ func initDatabase(db *sql.DB) error {
 			anime_id INTEGER NOT NULL,
 			channel_id TEXT NOT NULL,
 			last_notified_episode INTEGER NOT NULL DEFAULT 0,
+			last_updated_time INTEGER NOT NULL DEFAULT 0,
 			PRIMARY KEY (guild_id, anime_id)
 		);
 
