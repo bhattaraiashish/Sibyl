@@ -314,6 +314,17 @@ func (ctx *BotContext) InitGuilds() error {
 
 func (ctx *BotContext) RegisterCommands() {
 	if ctx.IsDebug {
+		_, err := ctx.Client.Rest.SetGlobalCommands(
+			ctx.Client.ApplicationID,
+			[]discord.ApplicationCommandCreate{},
+		)
+		if err != nil {
+			slog.Error(
+				"failed to clear global commands",
+				slog.Any("err", err),
+			)
+		}
+
 		return
 	}
 
@@ -327,10 +338,7 @@ func (ctx *BotContext) RegisterCommands() {
 			continue
 		}
 
-		commands = append(
-			commands,
-			command.Create(),
-		)
+		commands = append(commands, command.Create())
 	}
 
 	_, err := ctx.Client.Rest.SetGlobalCommands(
@@ -360,6 +368,8 @@ func (ctx *BotContext) StartTimers() {
 }
 
 func (ctx *BotContext) Login(token string) error {
+	slog.Info("debug mode", slog.Bool("is_debug", ctx.IsDebug))
+
 	db, err := sql.Open("sqlite", "sibyl.db")
 	if err != nil {
 		return err
@@ -436,6 +446,10 @@ func (ctx *BotContext) Login(token string) error {
 
 	<-s
 
+	if ctx.IsDebug {
+		ctx.UnregisterCommands()
+	}
+
 	ctx.Client.Close(context.TODO())
 	ctx.DB.Close()
 	return nil
@@ -443,6 +457,32 @@ func (ctx *BotContext) Login(token string) error {
 
 func (ctx *BotContext) Register(command Command) {
 	ctx.Commands = append(ctx.Commands, command)
+}
+
+func (ctx *BotContext) UnregisterCommands() {
+	guilds, err := ctx.Client.Rest.GetCurrentUserGuilds("", 0, 0, 0, false)
+	if err != nil {
+		slog.Error(
+			"failed to get guilds",
+			slog.Any("err", err),
+		)
+		return
+	}
+
+	for _, guild := range guilds {
+		_, err := ctx.Client.Rest.SetGuildCommands(
+			ctx.Client.ApplicationID,
+			guild.ID,
+			[]discord.ApplicationCommandCreate{},
+		)
+		if err != nil {
+			slog.Error(
+				"failed to unregister commands",
+				slog.Any("err", err),
+				slog.String("guild_id", guild.ID.String()),
+			)
+		}
+	}
 }
 
 func (ctx *BotContext) FindCommand(name string) *Command {
