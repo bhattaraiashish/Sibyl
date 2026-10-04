@@ -5,9 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
+	"time"
 
 	"github.com/disgoorg/disgo"
 	"github.com/disgoorg/disgo/bot"
@@ -18,10 +21,18 @@ import (
 	"github.com/disgoorg/snowflake/v2"
 )
 
+type Timer struct {
+	Interval time.Duration
+	Handler  func(*BotContext)
+}
+
 type BotContext struct {
-	DB       *sql.DB
-	Commands []Command
-	Client   *bot.Client
+	DB         *sql.DB
+	Commands   []Command
+	Components []Component
+	Timers     []Timer
+	Client     *bot.Client
+	HTTP       *http.Client
 }
 
 // ----------
@@ -40,11 +51,16 @@ const (
 	CommandPermissionAdmin
 )
 
+type AutoCompleteChoice struct {
+	Name  string
+	Value string
+}
+
 type AutocompleteHandler func(
 	ctx *BotContext,
 	event *events.AutocompleteInteractionCreate,
 	argument map[string]string,
-) []string
+) []AutoCompleteChoice
 
 type CommandArgument struct {
 	Name         string
@@ -155,6 +171,51 @@ func (command Command) Create() discord.SlashCommandCreate {
 	return result
 }
 
+type ComponentHandler func(
+	ctx *BotContext,
+	event *events.ComponentInteractionCreate,
+	args []string,
+)
+
+type Component struct {
+	ID      string
+	Handler ComponentHandler
+}
+
+func (ctx *BotContext) RegisterComponent(
+	id string,
+	handler ComponentHandler,
+) {
+	ctx.Components = append(
+		ctx.Components,
+		Component{
+			ID:      id,
+			Handler: handler,
+		},
+	)
+}
+
+func ComponentID(id string, args ...string) string {
+	if len(args) == 0 {
+		return id
+	}
+
+	return id + ":" + strings.Join(args, ";")
+}
+
+func (ctx *BotContext) RegisterTimer(
+	interval time.Duration,
+	handler func(*BotContext),
+) {
+	ctx.Timers = append(
+		ctx.Timers,
+		Timer{
+			Interval: interval,
+			Handler:  handler,
+		},
+	)
+}
+
 // ----------
 
 func (ctx *BotContext) SyncGuildCommands(
@@ -232,6 +293,20 @@ func (ctx *BotContext) InitGuilds() error {
 	return nil
 }
 
+func (ctx *BotContext) StartTimers() {
+	for _, timer := range ctx.Timers {
+		go func(timer Timer) {
+			ticker := time.NewTicker(timer.Interval)
+			defer ticker.Stop()
+
+			for {
+				timer.Handler(ctx)
+				<-ticker.C
+			}
+		}(timer)
+	}
+}
+
 func (ctx *BotContext) Login(token string) error {
 	db, err := sql.Open("sqlite", "sibyl.db")
 	if err != nil {
@@ -258,6 +333,9 @@ func (ctx *BotContext) Login(token string) error {
 					gateway.IntentMessageContent,
 			),
 		),
+		bot.WithEventListenerFunc(func(event *events.Ready) {
+			ctx.StartTimers()
+		}),
 		bot.WithEventListenerFunc(func(event *events.GuildJoin) {
 			if err := ctx.SyncGuildCommands(event.Guild.ID); err != nil {
 				slog.Error(
@@ -273,6 +351,9 @@ func (ctx *BotContext) Login(token string) error {
 		bot.WithEventListenerFunc(func(event *events.AutocompleteInteractionCreate) {
 			ctx.Autocomplete(event)
 		}),
+		bot.WithEventListenerFunc(func(event *events.ComponentInteractionCreate) {
+			ctx.HandleComponentInteraction(event)
+		}),
 	)
 	if err != nil {
 		db.Close()
@@ -280,6 +361,7 @@ func (ctx *BotContext) Login(token string) error {
 	}
 
 	ctx.Client = client
+	ctx.HTTP = &http.Client{}
 
 	if err := ctx.InitGuilds(); err != nil {
 		ctx.Client.Close(context.TODO())
@@ -340,11 +422,11 @@ func (ctx *BotContext) Execute(
 		value := data.String(argument.Name)
 
 		if value == "" && argument.Required {
-			SendError(
-				event,
-				"Invalid arguments",
-				"Missing required argument `"+argument.Name+"`.",
-			)
+			MessageBuild().Embed(discord.Embed{
+				Title:       "Invalid arguments",
+				Description: "Missing required argument `" + argument.Name + "`.",
+				Color:       ColorError,
+			}).SendMessage(event)
 			return
 		}
 
@@ -405,8 +487,8 @@ func (ctx *BotContext) Autocomplete(
 			results = append(
 				results,
 				discord.AutocompleteChoiceString{
-					Name:  choice,
-					Value: choice,
+					Name:  choice.Name,
+					Value: choice.Value,
 				},
 			)
 		}
@@ -421,26 +503,75 @@ func (ctx *BotContext) Autocomplete(
 	}
 }
 
+func (ctx *BotContext) HandleComponentInteraction(
+	event *events.ComponentInteractionCreate,
+) {
+	parts := strings.Split(event.Data.CustomID(), ":")
+
+	if len(parts) == 0 {
+		return
+	}
+
+	id := parts[0]
+
+	var args []string
+
+	if len(parts) > 1 {
+		args = strings.Split(parts[1], ";")
+	}
+
+	for _, component := range ctx.Components {
+		if component.ID != id {
+			continue
+		}
+
+		component.Handler(ctx, event, args)
+		return
+	}
+}
+
 const (
 	ColorSuccess = 0x57F287
 	ColorError   = 0xED4245
+	ColorWarning = 0xF1C40F
 )
 
-func SendMessage(
-	event *events.ApplicationCommandInteractionCreate,
-	title string,
-	description string,
-	color int,
+type MessageBuilder struct {
+	discord.MessageCreate
+}
+
+func MessageBuild() *MessageBuilder {
+	return &MessageBuilder{
+		MessageCreate: discord.NewMessageCreate(),
+	}
+}
+
+func (b *MessageBuilder) Embed(embed discord.Embed) *MessageBuilder {
+	b.MessageCreate.Embeds = append(b.MessageCreate.Embeds, embed)
+	return b
+}
+
+func (b *MessageBuilder) SendChannel(
+	ctx *BotContext,
+	channelID snowflake.ID,
 ) {
-	err := event.CreateMessage(
-		discord.NewMessageCreate().
-			WithEmbeds(
-				discord.NewEmbed().
-					WithTitle(title).
-					WithDescription(description).
-					WithColor(color),
-			),
+	_, err := ctx.Client.Rest.CreateMessage(
+		channelID,
+		b.MessageCreate,
 	)
+	if err != nil {
+		slog.Error(
+			"failed to send message",
+			slog.Any("err", err),
+			slog.String("channel_id", channelID.String()),
+		)
+	}
+}
+
+func (b *MessageBuilder) SendMessage(
+	event *events.ApplicationCommandInteractionCreate,
+) {
+	err := event.CreateMessage(b.MessageCreate)
 
 	if err != nil {
 		slog.Error(
@@ -450,12 +581,40 @@ func SendMessage(
 	}
 }
 
-func SendSuccess(event *events.ApplicationCommandInteractionCreate, title, description string) {
-	SendMessage(event, title, description, ColorSuccess)
+func (b *MessageBuilder) SendComponent(
+	event *events.ComponentInteractionCreate,
+) {
+	err := event.CreateMessage(b.MessageCreate)
+
+	if err != nil {
+		slog.Error(
+			"failed to send component message",
+			slog.Any("err", err),
+		)
+	}
 }
 
-func SendError(event *events.ApplicationCommandInteractionCreate, title, description string) {
-	SendMessage(event, title, description, ColorError)
+func HasRole(
+	ctx *BotContext,
+	member discord.Member,
+	guildID snowflake.ID,
+	name string,
+) bool {
+	roles, err := ctx.Client.Rest.GetRoles(guildID)
+	if err != nil {
+		return false
+	}
+
+	for _, roleID := range member.RoleIDs {
+		for _, role := range roles {
+			if role.ID == roleID &&
+				strings.EqualFold(role.Name, name) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 //--------------------
@@ -471,6 +630,20 @@ func initDatabase(db *sql.DB) error {
 		CREATE TABLE IF NOT EXISTS user_timezones (
 			user_id TEXT PRIMARY KEY,
 			timezone TEXT NOT NULL
+		);
+
+		CREATE TABLE IF NOT EXISTS tracked_anime (
+			guild_id TEXT NOT NULL,
+			anime_id INTEGER NOT NULL,
+			channel_id TEXT NOT NULL,
+			last_notified_episode INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (guild_id, anime_id)
+		);
+
+		CREATE TABLE IF NOT EXISTS guild_anime_notifications (
+			guild_id TEXT PRIMARY KEY,
+			interval INTEGER NOT NULL,
+			last_checked INTEGER NOT NULL DEFAULT 0
 		);
 	`)
 
