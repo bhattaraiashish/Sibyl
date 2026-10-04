@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -27,12 +28,16 @@ type Timer struct {
 }
 
 type BotContext struct {
-	DB         *sql.DB
-	Commands   []Command
-	Components []Component
-	Timers     []Timer
-	Client     *bot.Client
-	HTTP       *http.Client
+	DB              *sql.DB
+	Commands        []Command
+	Components      []Component
+	Timers          []Timer
+	FirstMessage    func(*BotContext)
+	Client          *bot.Client
+	HTTP            *http.Client
+	MessageCount    atomic.Int64
+	LastMessageTime atomic.Int64
+	IsDebug         bool
 }
 
 // ----------
@@ -216,7 +221,17 @@ func (ctx *BotContext) RegisterTimer(
 	)
 }
 
+func (ctx *BotContext) RegisterFirstMessage(
+	handler func(*BotContext),
+) {
+	ctx.FirstMessage = handler
+}
+
 // ----------
+
+func (ctx *BotContext) ResetMessageCount() {
+	ctx.MessageCount.Store(0)
+}
 
 func (ctx *BotContext) SyncGuildCommands(
 	guildID snowflake.ID,
@@ -235,6 +250,10 @@ func (ctx *BotContext) SyncGuildCommands(
 	commands := make([]discord.ApplicationCommandCreate, 0)
 
 	for _, command := range ctx.Commands {
+		if command.Feature == 0 && !ctx.IsDebug {
+			continue
+		}
+
 		if command.Feature != 0 &&
 			features&command.Feature == 0 {
 			continue
@@ -293,6 +312,39 @@ func (ctx *BotContext) InitGuilds() error {
 	return nil
 }
 
+func (ctx *BotContext) RegisterCommands() {
+	if ctx.IsDebug {
+		return
+	}
+
+	commands := make(
+		[]discord.ApplicationCommandCreate,
+		0,
+	)
+
+	for _, command := range ctx.Commands {
+		if command.Feature != 0 {
+			continue
+		}
+
+		commands = append(
+			commands,
+			command.Create(),
+		)
+	}
+
+	_, err := ctx.Client.Rest.SetGlobalCommands(
+		ctx.Client.ApplicationID,
+		commands,
+	)
+	if err != nil {
+		slog.Error(
+			"failed to register global commands",
+			slog.Any("err", err),
+		)
+	}
+}
+
 func (ctx *BotContext) StartTimers() {
 	for _, timer := range ctx.Timers {
 		go func(timer Timer) {
@@ -334,6 +386,7 @@ func (ctx *BotContext) Login(token string) error {
 			),
 		),
 		bot.WithEventListenerFunc(func(event *events.Ready) {
+			ctx.RegisterCommands()
 			ctx.StartTimers()
 		}),
 		bot.WithEventListenerFunc(func(event *events.GuildJoin) {
@@ -426,7 +479,7 @@ func (ctx *BotContext) Execute(
 				Title:       "Invalid arguments",
 				Description: "Missing required argument `" + argument.Name + "`.",
 				Color:       ColorError,
-			}).SendMessage(event)
+			}).SendMessage(ctx, event)
 			return
 		}
 
@@ -551,6 +604,14 @@ func (b *MessageBuilder) Embed(embed discord.Embed) *MessageBuilder {
 	return b
 }
 
+func (ctx *BotContext) UpdateMessageCount() {
+	new := ctx.MessageCount.Add(1)
+	ctx.LastMessageTime.Store(time.Now().Unix())
+	if new == 1 && ctx.FirstMessage != nil {
+		ctx.FirstMessage(ctx)
+	}
+}
+
 func (b *MessageBuilder) SendChannel(
 	ctx *BotContext,
 	channelID snowflake.ID,
@@ -566,9 +627,11 @@ func (b *MessageBuilder) SendChannel(
 			slog.String("channel_id", channelID.String()),
 		)
 	}
+	ctx.UpdateMessageCount()
 }
 
 func (b *MessageBuilder) SendMessage(
+	ctx *BotContext,
 	event *events.ApplicationCommandInteractionCreate,
 ) {
 	err := event.CreateMessage(b.MessageCreate)
@@ -579,9 +642,11 @@ func (b *MessageBuilder) SendMessage(
 			slog.Any("err", err),
 		)
 	}
+	ctx.UpdateMessageCount()
 }
 
 func (b *MessageBuilder) SendComponent(
+	ctx *BotContext,
 	event *events.ComponentInteractionCreate,
 ) {
 	err := event.CreateMessage(b.MessageCreate)
@@ -589,6 +654,21 @@ func (b *MessageBuilder) SendComponent(
 	if err != nil {
 		slog.Error(
 			"failed to send component message",
+			slog.Any("err", err),
+		)
+	}
+	ctx.UpdateMessageCount()
+}
+
+func (ctx *BotContext) UpdatePresence(status string) {
+	err := ctx.Client.SetPresence(
+		context.Background(),
+		gateway.WithCustomActivity(status),
+	)
+
+	if err != nil {
+		slog.Error(
+			"failed to update presence",
 			slog.Any("err", err),
 		)
 	}

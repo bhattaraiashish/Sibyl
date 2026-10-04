@@ -46,7 +46,7 @@ func ListFeaturesCommand(
 					).
 					WithColor(ColorError),
 			).
-			SendMessage(event)
+			SendMessage(ctx, event)
 		return
 	}
 
@@ -93,7 +93,7 @@ func ListFeaturesCommand(
 				WithDescription(description.String()).
 				WithColor(ColorSuccess),
 		).
-		SendMessage(event)
+		SendMessage(ctx, event)
 }
 
 func FeatureCommand(
@@ -119,7 +119,7 @@ func FeatureCommand(
 					WithDescription("Unknown feature.").
 					WithColor(ColorError),
 			).
-			SendMessage(event)
+			SendMessage(ctx, event)
 		return
 	}
 
@@ -138,7 +138,7 @@ func FeatureCommand(
 					WithDescription("Use `enable` or `disable`.").
 					WithColor(ColorError),
 			).
-			SendMessage(event)
+			SendMessage(ctx, event)
 	}
 }
 
@@ -188,7 +188,7 @@ func TimezoneCommand(
 				Title:       "Invalid timezone",
 				Description: "`" + timezone + "` is not a valid IANA timezone.",
 				Color:       ColorError,
-			}).SendMessage(event)
+			}).SendMessage(ctx, event)
 			return
 		}
 
@@ -205,7 +205,7 @@ func TimezoneCommand(
 				Title:       "Database error",
 				Description: "Failed to save your timezone.",
 				Color:       ColorError,
-			}).SendMessage(event)
+			}).SendMessage(ctx, event)
 			return
 		}
 
@@ -213,7 +213,7 @@ func TimezoneCommand(
 			Title:       "Timezone updated",
 			Description: "Your timezone is now `" + timezone + "`.",
 			Color:       ColorSuccess,
-		}).SendMessage(event)
+		}).SendMessage(ctx, event)
 		return
 	}
 
@@ -228,7 +228,7 @@ func TimezoneCommand(
 			Title:       "Timezone not set",
 			Description: "You haven't set your timezone yet.",
 			Color:       ColorError,
-		}).SendMessage(event)
+		}).SendMessage(ctx, event)
 		return
 	}
 
@@ -238,7 +238,7 @@ func TimezoneCommand(
 			Title:       "Database error",
 			Description: "Failed to retrieve your timezone.",
 			Color:       ColorError,
-		}).SendMessage(event)
+		}).SendMessage(ctx, event)
 		return
 	}
 
@@ -246,7 +246,7 @@ func TimezoneCommand(
 		Title:       "Your timezone",
 		Description: "`" + timezone + "`",
 		Color:       ColorSuccess,
-	}).SendMessage(event)
+	}).SendMessage(ctx, event)
 }
 
 func TimezoneAutocomplete(
@@ -393,7 +393,7 @@ func listFeatures(
 					).
 					WithColor(ColorError),
 			).
-			SendMessage(event)
+			SendMessage(ctx, event)
 		return
 	}
 
@@ -436,7 +436,7 @@ func listFeatures(
 				).
 				WithColor(ColorSuccess),
 		).
-		SendMessage(event)
+		SendMessage(ctx, event)
 }
 
 func enableFeature(
@@ -470,7 +470,7 @@ func enableFeature(
 					).
 					WithColor(ColorError),
 			).
-			SendMessage(event)
+			SendMessage(ctx, event)
 		return
 	}
 
@@ -486,10 +486,10 @@ func enableFeature(
 		Embed(
 			discord.NewEmbed().
 				WithTitle("Feature enabled").
-				WithDescription("The " + name + " has been enabled.").
+				WithDescription("The "+name+" has been enabled.").
 				WithColor(ColorSuccess),
 		).
-		SendMessage(event)
+		SendMessage(ctx, event)
 }
 
 func disableFeature(
@@ -523,7 +523,7 @@ func disableFeature(
 					).
 					WithColor(ColorError),
 			).
-			SendMessage(event)
+			SendMessage(ctx, event)
 		return
 	}
 
@@ -539,8 +539,8 @@ func disableFeature(
 		Embed(
 			discord.NewEmbed().
 				WithTitle("Feature disabled").
-				WithDescription("The " + name + " has been disabled.").
+				WithDescription("The "+name+" has been disabled.").
 				WithColor(ColorWarning),
 		).
-		SendMessage(event)
+		SendMessage(ctx, event)
 }

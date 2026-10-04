@@ -1,0 +1,59 @@
+[empty]
+Waiting for humans
+Waiting for behavioral data
+Observing quietly
+Awaiting input
+Standing by
+Awaiting human activity
+Nothing to analyze
+Monitoring in silence
+Awaiting new observations
+Human activity required
+No new data
+Waiting for more data
+
+[low]
+%d observations. Insufficient data.
+%d messages. More data required.
+%d observations. Pattern inconclusive.
+%d observations. Confidence low.
+%d observations. Sample size inadequate.
+%d messages. Statistical confidence insufficient.
+%d observations. Human behavior remains unclear.
+%d observations. Continuing analysis.
+%d messages. Behavioral model incomplete.
+%d observations. No reliable pattern detected.
+%d observations. Gathering more evidence.
+%d messages. Preliminary analysis underway.
+
+[medium]
+%d observations. Patterns emerging.
+Analyzing %d human messages
+Evaluating %d behavioral observations
+Learning from %d human interactions
+%d observations. Behavioral patterns detected.
+Refining behavioral model • %d observations
+%d observations. Increasing confidence.
+Studying human communication • %d messages
+%d observations. Correlating behavioral patterns.
+Constructing behavioral model • %d observations
+%d messages analyzed. Hypotheses forming.
+Learning how humans communicate • %d observations
+
+[high]
+%d observations. Model improving.
+Refining myself using %d observations
+Behavioral model updated • %d observations
+Understanding humans • %d observations
+Judgment accuracy improving • %d observations
+%d observations. Behavioral model stabilizing.
+Reevaluating human behavior • %d observations
+%d observations. Refining behavioral predictions.
+Updating decision model • %d observations
+%d observations. Human patterns becoming clearer.
+Optimizing judgment • %d observations
+Self-improvement cycle active • %d observations
+Learning from human behavior • %d observations
+%d observations. Predictive accuracy improving.
+Analyzing behavioral anomalies • %d observations
+%d observations. Updating internal model.

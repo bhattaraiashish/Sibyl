@@ -101,7 +101,7 @@ func AnimeSearch(
 				Title:       "Search failed",
 				Description: "Could not search for that anime.",
 				Color:       ColorError,
-			}).SendMessage(event)
+			}).SendMessage(ctx, event)
 			return
 		}
 
@@ -110,7 +110,7 @@ func AnimeSearch(
 				Title:       "Anime not found",
 				Description: "Could not find that anime.",
 				Color:       ColorError,
-			}).SendMessage(event)
+			}).SendMessage(ctx, event)
 			return
 		}
 
@@ -127,7 +127,7 @@ func AnimeSearch(
 			Title:       "Failed to get anime",
 			Description: "An error occurred while getting the anime.",
 			Color:       ColorError,
-		}).SendMessage(event)
+		}).SendMessage(ctx, event)
 		return
 	}
 
@@ -314,7 +314,7 @@ func TrackedAnime(
 			Title:       "Failed to get tracked anime",
 			Description: "An error occurred while getting tracked anime.",
 			Color:       ColorError,
-		}).SendMessage(event)
+		}).SendMessage(ctx, event)
 		return
 	}
 
@@ -323,7 +323,7 @@ func TrackedAnime(
 			Title:       "Tracked Anime",
 			Description: "No anime is currently being tracked.",
 			Color:       ColorWarning,
-		}).SendMessage(event)
+		}).SendMessage(ctx, event)
 		return
 	}
 
@@ -462,7 +462,7 @@ func TrackedAnime(
 		Title:       "Tracked Anime",
 		Description: strings.Join(list, "\n\n"),
 		Color:       ColorSuccess,
-	}).SendMessage(event)
+	}).SendMessage(ctx, event)
 }
 
 func TodayAnime(
@@ -491,7 +491,7 @@ func TodayAnime(
 					).
 					WithColor(ColorError),
 			).
-			SendMessage(event)
+			SendMessage(ctx, event)
 		return
 	}
 
@@ -539,7 +539,7 @@ func TodayAnime(
 						"",
 					),
 			).
-			SendMessage(event)
+			SendMessage(ctx, event)
 		return
 	}
 
@@ -556,7 +556,7 @@ func TodayAnime(
 					"",
 				),
 		).
-		SendMessage(event)
+		SendMessage(ctx, event)
 }
 
 func NextAnime(
@@ -585,7 +585,7 @@ func NextAnime(
 					).
 					WithColor(ColorError),
 			).
-			SendMessage(event)
+			SendMessage(ctx, event)
 		return
 	}
 
@@ -603,7 +603,7 @@ func NextAnime(
 						"",
 					),
 			).
-			SendMessage(event)
+			SendMessage(ctx, event)
 		return
 	}
 
@@ -649,7 +649,7 @@ func NextAnime(
 					"",
 				),
 		).
-		SendMessage(event)
+		SendMessage(ctx, event)
 }
 
 func SeasonAnime(
@@ -683,7 +683,7 @@ func SeasonAnime(
 					).
 					WithColor(ColorError),
 			).
-			SendMessage(event)
+			SendMessage(ctx, event)
 
 		return
 	}
@@ -698,7 +698,7 @@ func SeasonAnime(
 					).
 					WithColor(ColorWarning),
 			).
-			SendMessage(event)
+			SendMessage(ctx, event)
 
 		return
 	}
@@ -735,7 +735,7 @@ func SeasonAnime(
 				).
 				WithColor(ColorSuccess),
 		).
-		SendMessage(event)
+		SendMessage(ctx, event)
 }
 
 func NotifyAnimeCommand(
@@ -748,7 +748,7 @@ func NotifyAnimeCommand(
 			Title:       "Permission denied",
 			Description: "You need the `anime` role to configure anime notifications.",
 			Color:       ColorError,
-		}).SendMessage(event)
+		}).SendMessage(ctx, event)
 		return
 	}
 
@@ -776,7 +776,7 @@ func NotifyAnimeCommand(
 					).
 					WithColor(ColorError),
 			).
-			SendMessage(event)
+			SendMessage(ctx, event)
 	}
 }
 
@@ -1145,7 +1145,7 @@ func enableAnimeNotifications(
 						).
 						WithColor(ColorError),
 				).
-				SendMessage(event)
+				SendMessage(ctx, event)
 			return
 		}
 	}
@@ -1184,7 +1184,7 @@ func enableAnimeNotifications(
 					).
 					WithColor(ColorError),
 			).
-			SendMessage(event)
+			SendMessage(ctx, event)
 		return
 	}
 
@@ -1200,7 +1200,7 @@ func enableAnimeNotifications(
 				).
 				WithColor(ColorSuccess),
 		).
-		SendMessage(event)
+		SendMessage(ctx, event)
 }
 
 func disableAnimeNotifications(
@@ -1231,7 +1231,7 @@ func disableAnimeNotifications(
 					).
 					WithColor(ColorError),
 			).
-			SendMessage(event)
+			SendMessage(ctx, event)
 		return
 	}
 
@@ -1241,7 +1241,7 @@ func disableAnimeNotifications(
 				WithTitle("Anime notifications disabled").
 				WithColor(ColorWarning),
 		).
-		SendMessage(event)
+		SendMessage(ctx, event)
 }
 
 func getTrackedAnime(
@@ -1482,7 +1482,7 @@ func handleTrackAnimeComponent(
 		event.Message.ChannelID,
 		track,
 		func(message *MessageBuilder) {
-			message.SendComponent(event)
+			message.SendComponent(ctx, event)
 		},
 	)
 }
@@ -1502,7 +1502,7 @@ func handleTrackAnime(
 					WithDescription("Could not find that anime.").
 					WithColor(ColorError),
 			).
-			SendMessage(event)
+			SendMessage(ctx, event)
 		return
 	}
 
@@ -1514,7 +1514,7 @@ func handleTrackAnime(
 		event.Channel().ID(),
 		track,
 		func(message *MessageBuilder) {
-			message.SendMessage(event)
+			message.SendMessage(ctx, event)
 		},
 	)
 }
