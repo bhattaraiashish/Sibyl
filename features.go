@@ -14,9 +14,11 @@ import (
 )
 
 const FeatureAnime int64 = 1 << 0
+const FeatureRSS int64 = 1 << 1
 
 var Features = map[string]int64{
 	"anime": FeatureAnime,
+	"rss":   FeatureRSS,
 }
 
 func ListFeaturesCommand(
@@ -98,18 +100,11 @@ func ListFeaturesCommand(
 		SendMessage(ctx, event)
 }
 
-func FeatureCommand(
+func EnableFeatureCommand(
 	ctx *BotContext,
 	event *events.ApplicationCommandInteractionCreate,
 	args map[string]string,
 ) {
-	action := strings.ToLower(args["action"])
-
-	if action == "list" {
-		listFeatures(ctx, event)
-		return
-	}
-
 	name := strings.ToLower(args["feature"])
 	feature, ok := getFeature(name)
 
@@ -125,23 +120,30 @@ func FeatureCommand(
 		return
 	}
 
-	switch action {
-	case "enable":
-		enableFeature(ctx, event, feature, name)
+	enableFeature(ctx, event, feature, name)
+}
 
-	case "disable":
-		disableFeature(ctx, event, feature, name)
+func DisableFeatureCommand(
+	ctx *BotContext,
+	event *events.ApplicationCommandInteractionCreate,
+	args map[string]string,
+) {
+	name := strings.ToLower(args["feature"])
+	feature, ok := getFeature(name)
 
-	default:
+	if !ok || feature == 0 {
 		MessageBuild().
 			Embed(
 				discord.NewEmbed().
-					WithTitle("Invalid action").
-					WithDescription("Use `enable` or `disable`.").
+					WithTitle("Invalid feature").
+					WithDescription("Unknown feature.").
 					WithColor(ColorError),
 			).
 			SendMessage(ctx, event)
+		return
 	}
+
+	disableFeature(ctx, event, feature, name)
 }
 
 func FeatureAutocomplete(
@@ -149,12 +151,7 @@ func FeatureAutocomplete(
 	event *events.AutocompleteInteractionCreate,
 	args map[string]string,
 ) []AutoCompleteChoice {
-	action := strings.ToLower(args["action"])
 	value := strings.ToLower(args["feature"])
-
-	if action == "list" {
-		return nil
-	}
 
 	var choices []AutoCompleteChoice
 
@@ -278,71 +275,6 @@ func TimezoneAutocomplete(
 	return choices
 }
 
-func FeatureActionAutocomplete(
-	ctx *BotContext,
-	event *events.AutocompleteInteractionCreate,
-	args map[string]string,
-) []AutoCompleteChoice {
-	value := strings.ToLower(args["action"])
-
-	actions := []string{
-		"list",
-		"enable",
-		"disable",
-	}
-
-	var choices []AutoCompleteChoice
-
-	for _, action := range actions {
-		if value != "" &&
-			!strings.Contains(action, value) {
-			continue
-		}
-
-		choices = append(
-			choices,
-			AutoCompleteChoice{
-				Name:  action,
-				Value: action,
-			},
-		)
-	}
-
-	return choices
-}
-
-func EnableDisableAutocomplete(
-	ctx *BotContext,
-	event *events.AutocompleteInteractionCreate,
-	args map[string]string,
-) []AutoCompleteChoice {
-	value := strings.ToLower(args["action"])
-
-	actions := []string{
-		"enable",
-		"disable",
-	}
-
-	var choices []AutoCompleteChoice
-
-	for _, action := range actions {
-		if value != "" &&
-			!strings.Contains(action, value) {
-			continue
-		}
-
-		choices = append(
-			choices,
-			AutoCompleteChoice{
-				Name:  action,
-				Value: action,
-			},
-		)
-	}
-
-	return choices
-}
-
 func ClearChannelMessage(
 	ctx *BotContext,
 	event *events.ApplicationCommandInteractionCreate,
@@ -450,12 +382,23 @@ func ClearChannelMessage(
 }
 
 func InitCommonFeatures(ctx *BotContext) {
-	CommandBuild(ctx, "feature", "Enable or disable a feature").
-		Argument("action", "Enable or disable", true).
-		Autocomplete(FeatureActionAutocomplete).
-		Argument("feature", "Feature to configure", false).
-		Autocomplete(FeatureAutocomplete).
-		Handler(FeatureCommand).
+	CommandBuild(ctx, "feature", "Manage guild features").
+		SubCommand(
+			CommandBuild(ctx, "list", "List enabled features").
+				Handler(ListFeaturesCommand),
+		).
+		SubCommand(
+			CommandBuild(ctx, "enable", "Enable a feature").
+				Argument("feature", "Feature to enable", true).
+				Autocomplete(FeatureAutocomplete).
+				Handler(EnableFeatureCommand),
+		).
+		SubCommand(
+			CommandBuild(ctx, "disable", "Disable a feature").
+				Argument("feature", "Feature to disable", true).
+				Autocomplete(FeatureAutocomplete).
+				Handler(DisableFeatureCommand),
+		).
 		Register()
 
 	CommandBuild(ctx, "clear", "Clears upto last 100 bot messages").
@@ -475,80 +418,6 @@ func InitCommonFeatures(ctx *BotContext) {
 func getFeature(name string) (int64, bool) {
 	feature, ok := Features[name]
 	return feature, ok
-}
-
-func listFeatures(
-	ctx *BotContext,
-	event *events.ApplicationCommandInteractionCreate,
-) {
-	var value int64
-
-	err := ctx.DB.QueryRow(`
-		SELECT features
-		FROM guilds
-		WHERE guild_id = ?
-	`, event.GuildID()).Scan(&value)
-
-	if err != nil {
-		slog.Error(
-			"failed to get guild features",
-			slog.Any("err", err),
-			slog.String("guild_id", event.GuildID().String()),
-		)
-
-		MessageBuild().
-			Embed(
-				discord.NewEmbed().
-					WithTitle("Failed to get features").
-					WithDescription(
-						"An error occurred while getting guild features.",
-					).
-					WithColor(ColorError),
-			).
-			SendMessage(ctx, event)
-		return
-	}
-
-	var enabled []string
-	var disabled []string
-
-	for name, feature := range Features {
-		if value&feature != 0 {
-			enabled = append(enabled, "`"+name+"`")
-		} else {
-			disabled = append(disabled, "`"+name+"`")
-		}
-	}
-
-	sort.Strings(enabled)
-	sort.Strings(disabled)
-
-	var sections []string
-
-	if len(enabled) > 0 {
-		sections = append(
-			sections,
-			"**Enabled**\n"+strings.Join(enabled, ", "),
-		)
-	}
-
-	if len(disabled) > 0 {
-		sections = append(
-			sections,
-			"**Disabled**\n"+strings.Join(disabled, ", "),
-		)
-	}
-
-	MessageBuild().
-		Embed(
-			discord.NewEmbed().
-				WithTitle("Features").
-				WithDescription(
-					strings.Join(sections, "\n\n"),
-				).
-				WithColor(ColorSuccess),
-		).
-		SendMessage(ctx, event)
 }
 
 func enableFeature(
@@ -586,14 +455,6 @@ func enableFeature(
 		return
 	}
 
-	if err := ctx.SyncGuildCommands(*event.GuildID()); err != nil {
-		slog.Error(
-			"failed to sync guild commands",
-			slog.Any("err", err),
-			slog.String("guild_id", event.GuildID().String()),
-		)
-	}
-
 	MessageBuild().
 		Embed(
 			discord.NewEmbed().
@@ -602,6 +463,8 @@ func enableFeature(
 				WithColor(ColorSuccess),
 		).
 		SendMessage(ctx, event)
+
+	syncGuildCommandsDelayed(ctx, *event.GuildID())
 }
 
 func disableFeature(
@@ -639,14 +502,6 @@ func disableFeature(
 		return
 	}
 
-	if err := ctx.SyncGuildCommands(*event.GuildID()); err != nil {
-		slog.Error(
-			"failed to sync guild commands",
-			slog.Any("err", err),
-			slog.String("guild_id", event.GuildID().String()),
-		)
-	}
-
 	MessageBuild().
 		Embed(
 			discord.NewEmbed().
@@ -655,4 +510,23 @@ func disableFeature(
 				WithColor(ColorWarning),
 		).
 		SendMessage(ctx, event)
+
+	syncGuildCommandsDelayed(ctx, *event.GuildID())
+}
+
+func syncGuildCommandsDelayed(
+	ctx *BotContext,
+	guildID snowflake.ID,
+) {
+	go func() {
+		time.Sleep(5 * time.Second)
+
+		if err := ctx.SyncGuildCommands(guildID); err != nil {
+			slog.Error(
+				"failed to sync guild commands",
+				slog.Any("err", err),
+				slog.String("guild_id", guildID.String()),
+			)
+		}
+	}()
 }

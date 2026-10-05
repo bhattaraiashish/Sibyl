@@ -80,6 +80,7 @@ type Command struct {
 	Permission  CommandPermission
 	Feature     int64
 	Arguments   []CommandArgument
+	SubCommands []Command
 	Handler     CommandHandler
 }
 
@@ -146,20 +147,114 @@ func (b *CommandBuilder) Handler(
 	return b
 }
 
+func (b *CommandBuilder) SubCommand(
+	command *CommandBuilder,
+) *CommandBuilder {
+	b.command.SubCommands = append(
+		b.command.SubCommands,
+		command.command,
+	)
+	return b
+}
+
 func (b *CommandBuilder) Register() {
 	b.ctx.Register(b.command)
 }
 
 func (command Command) Create() discord.SlashCommandCreate {
-	options := make([]discord.ApplicationCommandOption, 0, len(command.Arguments))
+	options := make(
+		[]discord.ApplicationCommandOption,
+		0,
+		len(command.Arguments)+len(command.SubCommands),
+	)
 
 	for _, argument := range command.Arguments {
-		options = append(options, discord.ApplicationCommandOptionString{
-			Name:         argument.Name,
-			Description:  argument.Description,
-			Required:     argument.Required,
-			Autocomplete: argument.Autocomplete != nil,
-		})
+		options = append(
+			options,
+			discord.ApplicationCommandOptionString{
+				Name:         argument.Name,
+				Description:  argument.Description,
+				Required:     argument.Required,
+				Autocomplete: argument.Autocomplete != nil,
+			},
+		)
+	}
+
+	for _, subCommand := range command.SubCommands {
+		if len(subCommand.SubCommands) > 0 {
+			subOptions := make(
+				[]discord.ApplicationCommandOptionSubCommand,
+				0,
+				len(subCommand.SubCommands),
+			)
+
+			for _, nestedCommand := range subCommand.SubCommands {
+				nestedOptions := make(
+					[]discord.ApplicationCommandOption,
+					0,
+					len(nestedCommand.Arguments),
+				)
+
+				for _, argument := range nestedCommand.Arguments {
+					nestedOptions = append(
+						nestedOptions,
+						discord.ApplicationCommandOptionString{
+							Name:         argument.Name,
+							Description:  argument.Description,
+							Required:     argument.Required,
+							Autocomplete: argument.Autocomplete != nil,
+						},
+					)
+				}
+
+				subOptions = append(
+					subOptions,
+					discord.ApplicationCommandOptionSubCommand{
+						Name:        nestedCommand.Name,
+						Description: nestedCommand.Description,
+						Options:     nestedOptions,
+					},
+				)
+			}
+
+			options = append(
+				options,
+				discord.ApplicationCommandOptionSubCommandGroup{
+					Name:        subCommand.Name,
+					Description: subCommand.Description,
+					Options:     subOptions,
+				},
+			)
+
+			continue
+		}
+
+		subOptions := make(
+			[]discord.ApplicationCommandOption,
+			0,
+			len(subCommand.Arguments),
+		)
+
+		for _, argument := range subCommand.Arguments {
+			subOptions = append(
+				subOptions,
+				discord.ApplicationCommandOptionString{
+					Name:         argument.Name,
+					Description:  argument.Description,
+					Required:     argument.Required,
+					Autocomplete: argument.Autocomplete != nil,
+				},
+			)
+		}
+
+		options = append(
+			options,
+			discord.ApplicationCommandOptionSubCommand{
+				Name:        subCommand.Name,
+				Description: subCommand.Description,
+				Options:     subOptions,
+			},
+		)
 	}
 
 	result := discord.SlashCommandCreate{
@@ -502,28 +597,33 @@ func (ctx *BotContext) Execute(
 	}
 
 	data := event.SlashCommandInteractionData()
-	name := data.CommandName()
 
-	command := ctx.FindCommand(name)
+	command := ctx.FindCommand(data.CommandName())
 	if command == nil {
+		return
+	}
+
+	command = resolveCommand(command, data)
+	if command == nil || command.Handler == nil {
 		return
 	}
 
 	args := make(map[string]string)
 
-	for _, argument := range command.Arguments {
-		value := data.String(argument.Name)
+	for name, option := range data.Options {
+		var value string
 
-		if value == "" && argument.Required {
-			MessageBuild().Embed(discord.Embed{
-				Title:       "Invalid arguments",
-				Description: "Missing required argument `" + argument.Name + "`.",
-				Color:       ColorError,
-			}).SendMessage(ctx, event)
+		if err := json.Unmarshal(option.Value, &value); err != nil {
+			slog.Error(
+				"failed to unmarshal command option",
+				slog.Any("err", err),
+				slog.String("option", name),
+				slog.String("value", string(option.Value)),
+			)
 			return
 		}
 
-		args[argument.Name] = value
+		args[name] = value
 	}
 
 	command.Handler(ctx, event, args)
@@ -535,6 +635,11 @@ func (ctx *BotContext) Autocomplete(
 	data := event.Data
 
 	command := ctx.FindCommand(data.CommandName)
+	if command == nil {
+		return
+	}
+
+	command = resolveAutocomplete(command, data)
 	if command == nil {
 		return
 	}
@@ -572,9 +677,17 @@ func (ctx *BotContext) Autocomplete(
 			return
 		}
 
-		choices := argument.Autocomplete(ctx, event, args)
+		choices := argument.Autocomplete(
+			ctx,
+			event,
+			args,
+		)
 
-		results := make([]discord.AutocompleteChoice, 0, len(choices))
+		results := make(
+			[]discord.AutocompleteChoice,
+			0,
+			len(choices),
+		)
 
 		for _, choice := range choices {
 			results = append(
@@ -592,6 +705,7 @@ func (ctx *BotContext) Autocomplete(
 				slog.Any("err", err),
 			)
 		}
+
 		return
 	}
 }
@@ -627,6 +741,7 @@ const (
 	ColorSuccess = 0x57F287
 	ColorError   = 0xED4245
 	ColorWarning = 0xF1C40F
+	ColorInfo    = 0x3498DB
 )
 
 type MessageBuilder struct {
@@ -700,6 +815,31 @@ func (b *MessageBuilder) SendComponent(
 	ctx.UpdateMessageCount()
 }
 
+func (b *MessageBuilder) EditMessage(
+	ctx *BotContext,
+	event *events.ApplicationCommandInteractionCreate,
+) {
+	content := b.MessageCreate.Content
+	embeds := b.MessageCreate.Embeds
+
+	_, err := ctx.Client.Rest.UpdateInteractionResponse(
+		ctx.Client.ApplicationID,
+		event.Token(),
+		discord.MessageUpdate{
+			Content: &content,
+			Embeds:  &embeds,
+		},
+	)
+	if err != nil {
+		slog.Error(
+			"failed to edit interaction response",
+			slog.Any("err", err),
+		)
+	}
+
+	ctx.UpdateMessageCount()
+}
+
 func (ctx *BotContext) UpdatePresence(status string) {
 	err := ctx.Client.SetPresence(
 		context.Background(),
@@ -737,8 +877,66 @@ func HasRole(
 	return false
 }
 
-//--------------------
+// --------------------
 // Private functions
+
+func resolveCommand(
+	command *Command,
+	data discord.SlashCommandInteractionData,
+) *Command {
+	if data.SubCommandGroupName != nil {
+		for i := range command.SubCommands {
+			if command.SubCommands[i].Name != *data.SubCommandGroupName {
+				continue
+			}
+
+			command = &command.SubCommands[i]
+			break
+		}
+	}
+
+	if data.SubCommandName != nil {
+		for i := range command.SubCommands {
+			if command.SubCommands[i].Name != *data.SubCommandName {
+				continue
+			}
+
+			command = &command.SubCommands[i]
+			break
+		}
+	}
+
+	return command
+}
+
+func resolveAutocomplete(
+	command *Command,
+	data discord.AutocompleteInteractionData,
+) *Command {
+	if data.SubCommandGroupName != nil {
+		for i := range command.SubCommands {
+			if command.SubCommands[i].Name != *data.SubCommandGroupName {
+				continue
+			}
+
+			command = &command.SubCommands[i]
+			break
+		}
+	}
+
+	if data.SubCommandName != nil {
+		for i := range command.SubCommands {
+			if command.SubCommands[i].Name != *data.SubCommandName {
+				continue
+			}
+
+			command = &command.SubCommands[i]
+			break
+		}
+	}
+
+	return command
+}
 
 func initDatabase(db *sql.DB) error {
 	_, err := db.Exec(`
@@ -763,6 +961,15 @@ func initDatabase(db *sql.DB) error {
 
 		CREATE TABLE IF NOT EXISTS guild_anime_notifications (
 			guild_id TEXT PRIMARY KEY,
+			last_checked INTEGER NOT NULL DEFAULT 0
+		);
+
+		CREATE TABLE IF NOT EXISTS rss_feeds (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			guild_id TEXT NOT NULL,
+			channel_id TEXT NOT NULL,
+			url TEXT NOT NULL,
+			last_item_id TEXT,
 			last_checked INTEGER NOT NULL DEFAULT 0
 		);
 	`)

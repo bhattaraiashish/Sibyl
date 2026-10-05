@@ -19,51 +19,52 @@ import (
 )
 
 func InitAnimeFeatures(ctx *BotContext) {
-	CommandBuild(ctx, "anime", "Search for an anime").
-		Argument("name", "The name of the anime", true).
-		Autocomplete(AnimeSearchAutocomplete).
-		Handler(AnimeSearch).
-		Feature(FeatureAnime).
-		Register()
-
-	CommandBuild(ctx, "tracked", "Show tracked anime").
-		Handler(TrackedAnime).
-		Feature(FeatureAnime).
-		Register()
-
-	CommandBuild(ctx, "season", "Show anime for the current season").
-		Handler(SeasonAnime).
-		Feature(FeatureAnime).
-		Register()
-
-	CommandBuild(ctx, "today", "Show anime airing today").
-		Handler(TodayAnime).
-		Feature(FeatureAnime).
-		Register()
-
-	CommandBuild(ctx, "next", "Show next upcoming anime").
-		Handler(NextAnime).
-		Feature(FeatureAnime).
-		Register()
-
-	CommandBuild(ctx, "notify-anime", "Configure anime episode notifications").
-		Argument("action", "Enable or disable notifications", true).
-		Autocomplete(EnableDisableAutocomplete).
-		Handler(NotifyAnimeCommand).
-		Feature(FeatureAnime).
-		Register()
-
-	CommandBuild(ctx, "track", "Track an anime").
-		Argument("name", "Anime to track", true).
-		Autocomplete(AnimeSearchAutocomplete).
-		Handler(TrackAnime).
-		Feature(FeatureAnime).
-		Register()
-
-	CommandBuild(ctx, "untrack", "Stop tracking an anime").
-		Argument("name", "Anime to untrack", true).
-		Autocomplete(AnimeSearchAutocomplete).
-		Handler(UntrackAnime).
+	CommandBuild(ctx, "anime", "Manage anime").
+		SubCommand(
+			CommandBuild(ctx, "search", "Search for an anime").
+				Argument("name", "The name of the anime", true).
+				Autocomplete(AnimeSearchAutocomplete).
+				Handler(AnimeSearch),
+		).
+		SubCommand(
+			CommandBuild(ctx, "track", "Track an anime").
+				Argument("name", "Anime to track", true).
+				Autocomplete(AnimeSearchAutocomplete).
+				Handler(TrackAnime),
+		).
+		SubCommand(
+			CommandBuild(ctx, "untrack", "Stop tracking an anime").
+				Argument("name", "Anime to untrack", true).
+				Autocomplete(AnimeSearchAutocomplete).
+				Handler(UntrackAnime),
+		).
+		SubCommand(
+			CommandBuild(ctx, "tracked", "Show tracked anime").
+				Handler(TrackedAnime),
+		).
+		SubCommand(
+			CommandBuild(ctx, "season", "Show anime for the current season").
+				Handler(SeasonAnime),
+		).
+		SubCommand(
+			CommandBuild(ctx, "today", "Show anime airing today").
+				Handler(TodayAnime),
+		).
+		SubCommand(
+			CommandBuild(ctx, "next", "Show next upcoming anime").
+				Handler(NextAnime),
+		).
+		SubCommand(
+			CommandBuild(ctx, "notify", "Configure anime episode notifications").
+				SubCommand(
+					CommandBuild(ctx, "enable", "Enable anime episode notifications").
+						Handler(EnableAnimeNotificationsCommand),
+				).
+				SubCommand(
+					CommandBuild(ctx, "disable", "Disable anime episode notifications").
+						Handler(DisableAnimeNotificationsCommand),
+				),
+		).
 		Feature(FeatureAnime).
 		Register()
 
@@ -755,45 +756,58 @@ func SeasonAnime(
 		SendMessage(ctx, event)
 }
 
-func NotifyAnimeCommand(
+func EnableAnimeNotificationsCommand(
 	ctx *BotContext,
 	event *events.ApplicationCommandInteractionCreate,
 	args map[string]string,
 ) {
-	if !HasRole(ctx, &event.Member().Member, *event.GuildID(), "anime") {
-		MessageBuild().Embed(discord.Embed{
-			Title:       "Permission denied",
-			Description: "You need the `anime` role to configure anime notifications.",
-			Color:       ColorError,
-		}).SendMessage(ctx, event)
-		return
-	}
-
-	switch args["action"] {
-	case "enable":
-		enableAnimeNotifications(
-			ctx,
-			event,
-		)
-
-	case "disable":
-		disableAnimeNotifications(
-			ctx,
-			event,
-		)
-
-	default:
+	if !HasRole(
+		ctx,
+		&event.Member().Member,
+		*event.GuildID(),
+		"anime",
+	) {
 		MessageBuild().
 			Embed(
 				discord.NewEmbed().
-					WithTitle("Invalid action").
+					WithTitle("Permission denied").
 					WithDescription(
-						"Use `enable` or `disable`.",
+						"You need the `anime` role to configure anime notifications.",
 					).
 					WithColor(ColorError),
 			).
 			SendMessage(ctx, event)
+		return
 	}
+
+	enableAnimeNotifications(ctx, event)
+}
+
+func DisableAnimeNotificationsCommand(
+	ctx *BotContext,
+	event *events.ApplicationCommandInteractionCreate,
+	args map[string]string,
+) {
+	if !HasRole(
+		ctx,
+		&event.Member().Member,
+		*event.GuildID(),
+		"anime",
+	) {
+		MessageBuild().
+			Embed(
+				discord.NewEmbed().
+					WithTitle("Permission denied").
+					WithDescription(
+						"You need the `anime` role to configure anime notifications.",
+					).
+					WithColor(ColorError),
+			).
+			SendMessage(ctx, event)
+		return
+	}
+
+	disableAnimeNotifications(ctx, event)
 }
 
 func TrackAnime(
@@ -1192,15 +1206,17 @@ func enableAnimeNotifications(
 	event *events.ApplicationCommandInteractionCreate,
 ) {
 	_, err := ctx.DB.Exec(`
-		INSERT INTO guild_anime_notifications (
+	INSERT INTO guild_anime_notifications (
 			guild_id,
+			interval,
 			last_checked
 		)
-		VALUES (?, 0)
+		VALUES (?, ?, 0)
 		ON CONFLICT(guild_id)
 		DO NOTHING
 	`,
-		event.GuildID(),
+		*event.GuildID(),
+		int64(_AnimeCheckInterval/time.Second),
 	)
 
 	if err != nil {
@@ -1416,6 +1432,25 @@ func handleTrackAnimeEx(
 							"An error occurred while getting the anime.",
 						).
 						WithColor(ColorError),
+				),
+		)
+		return
+	}
+
+	if track && anime.Status == "FINISHED" {
+		send(
+			MessageBuild().
+				Embed(
+					discord.NewEmbed().
+						WithTitle("Anime already finished").
+						WithDescription(
+							fmt.Sprintf(
+								"%s has already finished airing and cannot be tracked.",
+								getAnimeTitle(anime),
+							),
+						).
+						WithThumbnail(anime.CoverImage.Medium).
+						WithColor(ColorWarning),
 				),
 		)
 		return

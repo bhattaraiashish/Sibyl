@@ -62,6 +62,7 @@ func main() {
 
 	config := LoadFromConfigFile(configPath)
 	SetAnimeCheckInterval(config.NotificationInterval)
+	SetRSSCheckInterval(config.NotificationInterval)
 
 	ctx := &BotContext{}
 	ctx.IsDebug = *debug
@@ -71,6 +72,7 @@ func main() {
 
 	InitCommonFeatures(ctx)
 	InitAnimeFeatures(ctx)
+	InitRSSFeatures(ctx)
 
 	//----------
 	// Start the bot
