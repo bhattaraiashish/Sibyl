@@ -1,0 +1,127 @@
+{{ define "content" }}
+
+<div class="header">
+    <div class="page-header">
+        <div>
+            <h1>Overview</h1>
+            <p>Sibyl bot overview.</p>
+        </div>
+    </div>
+</div>
+
+<div class="bot-profile">
+    <img class="bot-avatar" src="/static/bot.png" alt="Sibyl">
+
+    <div class="bot-info">
+        <div class="bot-name">Sibyl</div>
+        <div class="bot-status">
+            <span class="status">
+                <span class="status-dot"></span>
+                Online
+            </span>
+        </div>
+    </div>
+</div>
+
+<div class="cards">
+    <div class="card">
+        <div class="card-title">Guilds</div>
+        <div class="card-value">12</div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">Users</div>
+        <div class="card-value">248</div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">RSS Feeds</div>
+        <div class="card-value">34</div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">Anime</div>
+        <div class="card-value">18</div>
+    </div>
+</div>
+
+<div class="activity">
+    <div class="activity-header">
+        <div class="card-title">Activity</div>
+        <div class="activity-period">Last 14 days</div>
+    </div>
+
+    <div class="activity-chart">
+        <div class="activity-y-axis">
+            <span>100</span>
+            <span>75</span>
+            <span>50</span>
+            <span>25</span>
+            <span>0</span>
+        </div>
+
+        <div class="activity-graph">
+            <div class="activity-grid">
+                <span></span>
+                <span></span>
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+
+            <svg class="activity-line" viewBox="0 0 1400 200" preserveAspectRatio="none"
+                aria-label="Activity over the last 14 days">
+                <polyline points="
+                    0,145
+                    108,120
+                    215,135
+                    323,70
+                    431,95
+                    538,45
+                    646,80
+                    754,110
+                    862,85
+                    969,125
+                    1077,65
+                    1185,90
+                    1292,50
+                    1400,75
+                " fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke" />
+
+                <circle cx="0" cy="145" r="4" />
+                <circle cx="108" cy="120" r="4" />
+                <circle cx="215" cy="135" r="4" />
+                <circle cx="323" cy="70" r="4" />
+                <circle cx="431" cy="95" r="4" />
+                <circle cx="538" cy="45" r="4" />
+                <circle cx="646" cy="80" r="4" />
+                <circle cx="754" cy="110" r="4" />
+                <circle cx="862" cy="85" r="4" />
+                <circle cx="969" cy="125" r="4" />
+                <circle cx="1077" cy="65" r="4" />
+                <circle cx="1185" cy="90" r="4" />
+                <circle cx="1292" cy="50" r="4" />
+                <circle cx="1400" cy="75" r="4" />
+            </svg>
+
+            <div class="activity-x-axis">
+                <span>Mon</span>
+                <span>Tue</span>
+                <span>Wed</span>
+                <span>Thu</span>
+                <span>Fri</span>
+                <span>Sat</span>
+                <span>Sun</span>
+                <span>Mon</span>
+                <span>Tue</span>
+                <span>Wed</span>
+                <span>Thu</span>
+                <span>Fri</span>
+                <span>Sat</span>
+                <span>Sun</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{ end }}

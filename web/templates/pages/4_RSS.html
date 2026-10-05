@@ -1,0 +1,68 @@
+{{ define "content" }}
+
+<div class="page-top">
+    <div class="header">
+        <div class="page-header">
+            <div>
+                <h1>RSS</h1>
+                <p>Manage RSS feeds.</p>
+            </div>
+
+            <a class="button button-primary" href="#">Invite</a>
+        </div>
+    </div>
+
+    <div class="page-tools">
+        {{ template "server-select" . }}
+        {{ template "search" . }}
+    </div>
+</div>
+
+<section class="editable-table">
+    <div class="editable-table-header">
+        <div>ID</div>
+        <div>Link</div>
+        <div></div>
+    </div>
+
+    <div class="editable-row">
+        <div class="editable-cell">
+            1
+        </div>
+
+        <div class="editable-cell">
+            <input type="url" value="https://example.com/feed.xml">
+        </div>
+
+        <div class="editable-actions">
+            <button class="editable-remove" type="button">×</button>
+        </div>
+    </div>
+
+    <div class="editable-row">
+        <div class="editable-cell">
+            2
+        </div>
+
+        <div class="editable-cell">
+            <input type="url" value="https://example.com/rss">
+        </div>
+
+        <div class="editable-actions">
+            <button class="editable-remove" type="button">×</button>
+        </div>
+    </div>
+
+    <button class="editable-add" type="button">+</button>
+</section>
+
+<div class="page-actions">
+    <button class="button" type="button" disabled>
+        Discard
+    </button>
+
+    <button class="button button-primary" type="button" disabled>
+        Save changes
+    </button>
+</div>
+{{ end }}

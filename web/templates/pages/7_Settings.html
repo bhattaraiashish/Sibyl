@@ -1,0 +1,45 @@
+{{ define "content" }}
+
+<div class="page-top">
+    <div class="header">
+        <div class="page-header">
+            <div>
+                <h1>Settings</h1>
+                <p>Configure Sibyl.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="editable-table">
+    <div class="editable-table-header">
+        <div>Setting</div>
+        <div>Value</div>
+        <div></div>
+    </div>
+
+    <div class="editable-row">
+        <div class="editable-cell">
+            Notification interval
+        </div>
+
+        <div class="editable-cell">
+            <input type="text" name="notification_interval" value="{{ .Config.NotificationInterval }}">
+        </div>
+
+        <div class="editable-actions"></div>
+    </div>
+
+</div>
+
+<div class="page-actions">
+    <button class="button" type="button" disabled>
+        Discard
+    </button>
+
+    <button class="button button-primary" type="button" disabled>
+        Save changes
+    </button>
+</div>
+
+{{ end }}

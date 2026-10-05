@@ -1,0 +1,74 @@
+{{ define "content" }}
+
+<div class="page-top">
+    <div class="header">
+        <div class="page-header">
+            <div>
+                <h1>Anime</h1>
+                <p>Manage Anime trackings.</p>
+            </div>
+
+            <a class="button button-primary" href="#">Invite</a>
+        </div>
+    </div>
+
+    <div class="page-tools">
+        {{ template "server-select" . }}
+        {{ template "search" . }}
+    </div>
+</div>
+
+<section class="editable-table anime-table">
+    <div class="editable-table-header">
+        <div>Anime</div>
+        <div>Episodes</div>
+        <div></div>
+    </div>
+
+    <div class="editable-row">
+        <div class="editable-cell">
+            <div class="user-info">
+                <div class="anime-thumbnail">?</div>
+                <a class="anime-name" href="#">One Piece</a>
+            </div>
+        </div>
+
+        <div class="editable-cell">
+            3/5
+        </div>
+
+        <div class="editable-actions">
+            <button class="editable-remove" type="button">×</button>
+        </div>
+    </div>
+
+    <div class="editable-row">
+        <div class="editable-cell">
+            <div class="user-info">
+                <div class="anime-thumbnail">?</div>
+                <a class="anime-name" href="#">Frieren: Beyond Journey's End</a>
+            </div>
+        </div>
+
+        <div class="editable-cell">
+            12/28
+        </div>
+
+        <div class="editable-actions">
+            <button class="editable-remove" type="button">×</button>
+        </div>
+    </div>
+
+    <button class="editable-add" type="button">+</button>
+</section>
+
+<div class="page-actions">
+    <button class="button" type="button" disabled>
+        Discard
+    </button>
+
+    <button class="button button-primary" type="button" disabled>
+        Save changes
+    </button>
+</div>
+{{ end }}

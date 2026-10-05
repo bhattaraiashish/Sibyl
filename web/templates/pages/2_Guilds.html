@@ -1,0 +1,90 @@
+{{ define "content" }}
+
+<div class="page-top">
+    <div class="header">
+        <div class="page-header">
+            <div>
+                <h1>Guilds</h1>
+                <p>Manage the guilds where Sibyl is installed.</p>
+            </div>
+
+            <a class="button button-primary" href="#">Invite</a>
+        </div>
+    </div>
+
+    {{ template "search" . }}
+</div>
+
+<section class="editable-table">
+    <div class="editable-table-header">
+        <div>Guild</div>
+        <div>Features</div>
+        <div></div>
+    </div>
+
+    <div class="editable-row">
+        <div class="editable-cell">
+            <div class="guild-info">
+                <div class="guild-icon">?</div>
+                <div class="guild-name">My Server</div>
+            </div>
+        </div>
+
+        <div class="editable-cell">
+            <div class="features">
+                <div class="feature">
+                    RSS
+                    <button class="feature-remove" type="button">×</button>
+                </div>
+
+                <div class="feature">
+                    Anime
+                    <button class="feature-remove" type="button">×</button>
+                </div>
+
+                <div class="feature">
+                    Timezone
+                    <button class="feature-remove" type="button">×</button>
+                </div>
+
+                <button class="feature-add" type="button">+</button>
+            </div>
+        </div>
+
+        <div class="editable-actions"></div>
+    </div>
+
+    <div class="editable-row">
+        <div class="editable-cell">
+            <div class="guild-info">
+                <div class="guild-icon">?</div>
+                <div class="guild-name">Another Server</div>
+            </div>
+        </div>
+
+        <div class="editable-cell">
+            <div class="features">
+                <div class="feature">
+                    RSS
+                    <button class="feature-remove" type="button">×</button>
+                </div>
+
+                <button class="feature-add" type="button">+</button>
+            </div>
+        </div>
+
+        <div class="editable-actions"></div>
+    </div>
+
+</section>
+
+<div class="page-actions">
+    <button class="button" type="button" disabled>
+        Discard
+    </button>
+
+    <button class="button button-primary" type="button" disabled>
+        Save changes
+    </button>
+</div>
+{{ end }}

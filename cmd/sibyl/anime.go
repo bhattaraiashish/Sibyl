@@ -16,6 +16,8 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/events"
 	"github.com/disgoorg/snowflake/v2"
+
+	"github.com/bhattaraiashish/Sibyl/internal/anilist"
 )
 
 func InitAnimeFeatures(ctx *BotContext) {
@@ -86,15 +88,15 @@ func AnimeSearch(
 
 	client := &http.Client{}
 
-	var anime *Media
+	var anime *anilist.Media
 	var err error
 
 	id, parseErr := strconv.Atoi(value)
 
 	if parseErr == nil {
-		anime, err = GetAnime(client, id)
+		anime, err = anilist.GetAnime(client, id)
 	} else {
-		result, searchErr := SearchAnime(client, value, 1)
+		result, searchErr := anilist.SearchAnime(client, value, 1)
 
 		if searchErr != nil {
 			MessageBuild().Embed(discord.Embed{
@@ -114,7 +116,7 @@ func AnimeSearch(
 			return
 		}
 
-		anime, err = GetAnime(client, result.Media[0].Id)
+		anime, err = anilist.GetAnime(client, result.Media[0].Id)
 	}
 
 	if err != nil {
@@ -257,7 +259,7 @@ func AnimeSearchAutocomplete(
 		return choices
 	}
 
-	result, err := SearchAnime(
+	result, err := anilist.SearchAnime(
 		&http.Client{},
 		value,
 		25,
@@ -319,7 +321,7 @@ func TrackedAnime(
 		return
 	}
 
-	var upcoming []*Media
+	var upcoming []*anilist.Media
 
 	for _, anime := range animeList {
 		if anime.NextAiringEpisode == nil {
@@ -670,7 +672,7 @@ func SeasonAnime(
 
 	season, year := currentAnimeSeason()
 
-	result, err := SearchSeasonAnime(
+	result, err := anilist.SearchSeasonAnime(
 		client,
 		season,
 		year,
@@ -1037,7 +1039,7 @@ func isAnimeTracked(
 	return exists, err
 }
 
-func getAnimeColor(anime *Media) int {
+func getAnimeColor(anime *anilist.Media) int {
 	if anime.CoverImage.Color == "" {
 		return 0
 	}
@@ -1087,7 +1089,7 @@ func formatCountdown(target time.Time) string {
 }
 
 type UpcomingAnime struct {
-	Anime    *Media
+	Anime    *anilist.Media
 	Episode  int
 	AiringAt time.Time
 }
@@ -1153,7 +1155,7 @@ func getUpcomingAnime(
 	return upcoming, timezone, nil
 }
 
-func getAnimeTitle(anime *Media) string {
+func getAnimeTitle(anime *anilist.Media) string {
 	if anime.Title.English != "" {
 		return anime.Title.English
 	}
@@ -1161,7 +1163,7 @@ func getAnimeTitle(anime *Media) string {
 	return anime.Title.Romaji
 }
 
-func getAnimeMinimalTitle(anime *MediaMinimal) string {
+func getAnimeMinimalTitle(anime *anilist.MediaMinimal) string {
 	if anime.Title.English != "" {
 		return anime.Title.English
 	}
@@ -1301,7 +1303,7 @@ func disableAnimeNotifications(
 func getTrackedAnime(
 	ctx *BotContext,
 	guildID snowflake.ID,
-) ([]*Media, error) {
+) ([]*anilist.Media, error) {
 	rows, err := ctx.DB.Query(`
 		SELECT anime_id
 		FROM tracked_anime
@@ -1316,7 +1318,7 @@ func getTrackedAnime(
 
 	client := &http.Client{}
 
-	var animeList []*Media
+	var animeList []*anilist.Media
 
 	for rows.Next() {
 		var id int
@@ -1325,7 +1327,7 @@ func getTrackedAnime(
 			return nil, err
 		}
 
-		anime, err := GetAnime(client, id)
+		anime, err := anilist.GetAnime(client, id)
 		if err != nil {
 			slog.Error(
 				"failed to get tracked anime",
@@ -1354,7 +1356,7 @@ func setAnimeTracked(
 	member *discord.Member,
 	guildID snowflake.ID,
 	channelID snowflake.ID,
-	anime *Media,
+	anime *anilist.Media,
 	track bool,
 ) error {
 	if !HasRole(
@@ -1415,7 +1417,7 @@ func handleTrackAnimeEx(
 	track bool,
 	send func(*MessageBuilder),
 ) {
-	anime, err := GetAnime(&http.Client{}, id)
+	anime, err := anilist.GetAnime(&http.Client{}, id)
 	if err != nil {
 		slog.Error(
 			"failed to get anime",
@@ -1593,7 +1595,7 @@ func handleTrackAnime(
 }
 
 func getEpisodeTitle(
-	anime *Media,
+	anime *anilist.Media,
 	episode int,
 ) string {
 	index := episode - 1
@@ -1606,7 +1608,7 @@ func getEpisodeTitle(
 func notifyAnimeEpisode(
 	ctx *BotContext,
 	channelID snowflake.ID,
-	anime *Media,
+	anime *anilist.Media,
 	episode int,
 ) {
 	episodeText := fmt.Sprintf(
@@ -1655,7 +1657,7 @@ func notifyAnimeEpisode(
 func notifyAnimeFinished(
 	ctx *BotContext,
 	channelID snowflake.ID,
-	anime *Media,
+	anime *anilist.Media,
 ) {
 	embed := discord.NewEmbed().
 		WithTitle("Anime finished").
@@ -1766,7 +1768,7 @@ func processTrackedAnime(
 	lastNotifiedEpisode int,
 	lastUpdatedTime int64,
 ) {
-	anime, err := GetAnime(client, animeID)
+	anime, err := anilist.GetAnime(client, animeID)
 	if err != nil {
 		slog.Error(
 			"failed to get anime",

@@ -1,0 +1,76 @@
+{{ define "layout" }}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .Title }} - Sibyl</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="logo">Sibyl</div>
+
+            <nav class="nav">
+                {{ range .Pages }}
+                <a href="{{ .Path }}" class="{{ if eq $.Page .ID }}active{{ end }}">
+                    {{ .Title }}
+                </a>
+                {{ end }}
+            </nav>
+        </aside>
+
+        <main class="content">
+            {{ template "content" . }}
+        </main>
+    </div>
+</body>
+</html>
+{{ end }}
+
+{{ define "server-select" }}
+<div class="server-select">
+    <div class="server-select-current">
+        {{ if .SelectedGuild.Icon }}
+        <img
+            class="server-select-icon"
+            src="{{ .SelectedGuild.Icon }}"
+            alt=""
+        >
+        {{ else }}
+        <div class="server-select-icon server-select-icon-placeholder">
+            {{ printf "%.1s" .SelectedGuild.Name }}
+        </div>
+        {{ end }}
+
+        <span>{{ .SelectedGuild.Name }}</span>
+    </div>
+
+    <select name="guild" class="server-select-dropdown">
+        {{ range .Guilds }}
+        <option
+            value="{{ .ID }}"
+            {{ if eq .ID $.SelectedGuild.ID }}selected{{ end }}
+        >
+            {{ .Name }}
+        </option>
+        {{ end }}
+    </select>
+</div>
+{{ end }}
+
+{{ define "search" }}
+<form class="search" method="get">
+    <input
+        type="search"
+        name="q"
+        value="{{ .SearchQuery }}"
+        placeholder="Search..."
+    >
+    <button class="button button-primary" type="submit">
+        Search
+    </button>
+</form>
+{{ end }}
