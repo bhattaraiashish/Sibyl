@@ -763,7 +763,6 @@ func initDatabase(db *sql.DB) error {
 
 		CREATE TABLE IF NOT EXISTS guild_anime_notifications (
 			guild_id TEXT PRIMARY KEY,
-			interval INTEGER NOT NULL,
 			last_checked INTEGER NOT NULL DEFAULT 0
 		);
 	`)

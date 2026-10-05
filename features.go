@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"sort"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/events"
+	"github.com/disgoorg/snowflake/v2"
 )
 
 const FeatureAnime int64 = 1 << 0
@@ -341,6 +343,112 @@ func EnableDisableAutocomplete(
 	return choices
 }
 
+func ClearChannelMessage(
+	ctx *BotContext,
+	event *events.ApplicationCommandInteractionCreate,
+	args map[string]string,
+) {
+	channelID := event.Channel().ID()
+
+	messages, err := ctx.Client.Rest.GetMessages(
+		channelID,
+		0, // around
+		0, // before
+		0, // after
+		100,
+	)
+	if err != nil {
+		slog.Error("failed to fetch channel messages", "error", err)
+
+		MessageBuild().
+			Embed(discord.Embed{
+				Title:       "Clear failed",
+				Description: "Failed to fetch channel messages.",
+				Color:       ColorError,
+			}).
+			SendMessage(ctx, event)
+
+		return
+	}
+
+	botID := ctx.Client.ID()
+
+	var messageIDs []snowflake.ID
+
+	for _, message := range messages {
+		if message.Author.ID != botID {
+			break
+		}
+
+		messageIDs = append(messageIDs, message.ID)
+	}
+
+	if len(messageIDs) == 0 {
+		MessageBuild().
+			Embed(discord.Embed{
+				Title:       "Nothing to clear",
+				Description: "There are no consecutive messages from the bot.",
+				Color:       ColorError,
+			}).
+			SendMessage(ctx, event)
+
+		return
+	}
+
+	if len(messageIDs) == 1 {
+		if err := ctx.Client.Rest.DeleteMessage(
+			channelID,
+			messageIDs[0],
+			nil,
+		); err != nil {
+			slog.Error(
+				"failed to delete bot message",
+				"message_id", messageIDs[0],
+				"error", err,
+			)
+
+			MessageBuild().
+				Embed(discord.Embed{
+					Title:       "Clear failed",
+					Description: "Failed to delete the bot message.",
+					Color:       ColorError,
+				}).
+				SendMessage(ctx, event)
+
+			return
+		}
+	} else {
+		if err := ctx.Client.Rest.BulkDeleteMessages(
+			channelID,
+			messageIDs,
+		); err != nil {
+			slog.Error(
+				"failed to bulk delete bot messages",
+				"count", len(messageIDs),
+				"error", err,
+			)
+
+			MessageBuild().
+				Embed(discord.Embed{
+					Title:       "Clear failed",
+					Description: "Failed to delete the bot messages.",
+					Color:       ColorError,
+				}).
+				SendMessage(ctx, event)
+
+			return
+		}
+	}
+
+	MessageBuild().
+		Embed(discord.Embed{
+			Title:       "Messages cleared",
+			Description: fmt.Sprintf("Cleared %d message(s).", len(messageIDs)),
+			Color:       ColorSuccess,
+		}).
+		SendMessage(ctx, event)
+}
+
 func InitCommonFeatures(ctx *BotContext) {
 	CommandBuild(ctx, "feature", "Enable or disable a feature").
 		Argument("action", "Enable or disable", true).
@@ -348,6 +456,10 @@ func InitCommonFeatures(ctx *BotContext) {
 		Argument("feature", "Feature to configure", false).
 		Autocomplete(FeatureAutocomplete).
 		Handler(FeatureCommand).
+		Register()
+
+	CommandBuild(ctx, "clear", "Clears upto last 100 bot messages").
+		Handler(ClearChannelMessage).
 		Register()
 
 	CommandBuild(ctx, "timezone", "Set or show your timezone").

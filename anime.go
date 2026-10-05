@@ -49,7 +49,6 @@ func InitAnimeFeatures(ctx *BotContext) {
 	CommandBuild(ctx, "notify-anime", "Configure anime episode notifications").
 		Argument("action", "Enable or disable notifications", true).
 		Autocomplete(EnableDisableAutocomplete).
-		Argument("interval", "Check interval, such as 30m or 1h", false).
 		Handler(NotifyAnimeCommand).
 		Feature(FeatureAnime).
 		Register()
@@ -131,13 +130,7 @@ func AnimeSearch(
 		return
 	}
 
-	title := anime.Title.Romaji
-
-	if anime.Title.English != "" &&
-		anime.Title.English != anime.Title.Romaji {
-		title = anime.Title.English +
-			" (" + anime.Title.Romaji + ")"
-	}
+	title := getAnimeTitle(anime)
 
 	description := anime.Description
 
@@ -145,6 +138,10 @@ func AnimeSearch(
 		description = "No description available."
 	} else {
 		description = htmlToMarkdown(description)
+	}
+
+	if len(description) > 4096 {
+		description = string([]rune(description)[:4096])
 	}
 
 	tracking := "No"
@@ -203,6 +200,7 @@ func AnimeSearch(
 
 	embed := discord.NewEmbed().
 		WithTitle(title).
+		WithURL(fmt.Sprintf("https://anilist.co/anime/%d", anime.Id)).
 		WithDescription(description).
 		WithColor(getAnimeColor(anime)).
 		WithThumbnail(anime.CoverImage.Medium).
@@ -272,14 +270,7 @@ func AnimeSearchAutocomplete(
 	}
 
 	for _, anime := range result.Media {
-		english := anime.Title.English
-		romaji := anime.Title.Romaji
-
-		name := romaji
-
-		if english != "" && english != romaji {
-			name = english + " (" + romaji + ")"
-		}
+		name := getAnimeMinimalTitle(&anime)
 
 		if utf8.RuneCountInString(name) > 100 {
 			name = string([]rune(name)[:100])
@@ -363,13 +354,12 @@ func TrackedAnime(
 			continue
 		}
 
-		title := anime.Title.Romaji
-
-		if anime.Title.English != "" &&
-			anime.Title.English != anime.Title.Romaji {
-			title = anime.Title.English +
-				" (" + anime.Title.Romaji + ")"
-		}
+		title := getAnimeTitle(anime)
+		title = fmt.Sprintf(
+			"[%s](https://anilist.co/anime/%d)",
+			title,
+			anime.Id,
+		)
 
 		if anime.Status == "NOT_YET_RELEASED" {
 			releaseDate := time.Date(
@@ -412,7 +402,7 @@ func TrackedAnime(
 		)
 	}
 
-	var list []string
+	var description DescriptionBuilder
 
 	for _, day := range days {
 		anime := groups[day]
@@ -420,49 +410,43 @@ func TrackedAnime(
 			continue
 		}
 
-		var dayList []string
+		if !description.AddLine(fmt.Sprintf("**%s**", day)) {
+			break
+		}
 
 		for i, title := range anime {
-			dayList = append(
-				dayList,
-				fmt.Sprintf("%d. %s", i+1, title),
-			)
-		}
+			line := fmt.Sprintf("%d. %s", i+1, title)
 
-		list = append(
-			list,
-			fmt.Sprintf(
-				"**%s**\n%s",
-				day,
-				strings.Join(dayList, "\n"),
-			),
-		)
+			if !description.AddLine(line) {
+				break
+			}
+		}
 	}
 
-	if len(comingSoon) > 0 {
-		var comingSoonList []string
+	if len(comingSoon) > 0 && !description.Truncated() {
+		if description.AddLine("**Coming Soon**") {
+			for i, title := range comingSoon {
+				line := fmt.Sprintf("%d. %s", i+1, title)
 
-		for i, title := range comingSoon {
-			comingSoonList = append(
-				comingSoonList,
-				fmt.Sprintf("%d. %s", i+1, title),
-			)
+				if !description.AddLine(line) {
+					break
+				}
+			}
 		}
-
-		list = append(
-			list,
-			fmt.Sprintf(
-				"**Coming Soon**\n%s",
-				strings.Join(comingSoonList, "\n"),
-			),
-		)
 	}
 
-	MessageBuild().Embed(discord.Embed{
-		Title:       "Tracked Anime",
-		Description: strings.Join(list, "\n\n"),
-		Color:       ColorSuccess,
-	}).SendMessage(ctx, event)
+	embed := discord.NewEmbed().
+		WithTitle("Tracked Anime").
+		WithDescription(description.String()).
+		WithColor(ColorSuccess)
+
+	if description.Truncated() {
+		embed = embed.WithFooter("Results truncated!", "")
+	}
+
+	MessageBuild().
+		Embed(embed).
+		SendMessage(ctx, event)
 }
 
 func TodayAnime(
@@ -505,7 +489,7 @@ func TodayAnime(
 	start := now.Add(-12 * time.Hour)
 	end := now.Add(12 * time.Hour)
 
-	var list []string
+	var description DescriptionBuilder
 
 	for _, episode := range upcoming {
 		if episode.AiringAt.Before(start) ||
@@ -513,19 +497,27 @@ func TodayAnime(
 			continue
 		}
 
-		list = append(
-			list,
-			fmt.Sprintf(
-				"%d. %s — Episode %d — %s",
-				len(list)+1,
-				getAnimeTitle(episode.Anime),
-				episode.Episode,
-				episode.AiringAt.Format("15:04"),
-			),
+		title := getAnimeTitle(episode.Anime)
+		title = fmt.Sprintf(
+			"[%s](https://anilist.co/anime/%d)",
+			title,
+			episode.Anime.Id,
 		)
+
+		line := fmt.Sprintf(
+			"%d. %s — Episode %d — %s",
+			description.Len()+1,
+			title,
+			episode.Episode,
+			episode.AiringAt.Format("15:04"),
+		)
+
+		if !description.AddLine(line) {
+			break
+		}
 	}
 
-	if len(list) == 0 {
+	if description.Len() == 0 {
 		MessageBuild().
 			Embed(
 				discord.NewEmbed().
@@ -543,16 +535,20 @@ func TodayAnime(
 		return
 	}
 
+	footer := "Timezone: " + timezone
+
+	if description.Truncated() {
+		footer += " • Results truncated!"
+	}
+
 	MessageBuild().
 		Embed(
 			discord.NewEmbed().
 				WithTitle("Today's Anime").
-				WithDescription(
-					strings.Join(list, "\n"),
-				).
+				WithDescription(description.String()).
 				WithColor(ColorSuccess).
 				WithFooter(
-					"Timezone: "+timezone,
+					footer,
 					"",
 				),
 		).
@@ -609,9 +605,9 @@ func NextAnime(
 
 	now := time.Now().In(upcoming[0].AiringAt.Location())
 
-	var list []string
+	var description DescriptionBuilder
 
-	for i, episode := range upcoming {
+	for _, episode := range upcoming {
 		var when string
 
 		if episode.AiringAt.Year() == now.Year() &&
@@ -624,28 +620,40 @@ func NextAnime(
 			when = episode.AiringAt.Format("Mon Jan 2 15:04")
 		}
 
-		list = append(
-			list,
-			fmt.Sprintf(
-				"%d. %s — Episode %d — %s",
-				i+1,
-				getAnimeTitle(episode.Anime),
-				episode.Episode,
-				when,
-			),
+		title := getAnimeTitle(episode.Anime)
+		title = fmt.Sprintf(
+			"[%s](https://anilist.co/anime/%d)",
+			title,
+			episode.Anime.Id,
 		)
+
+		line := fmt.Sprintf(
+			"%d. %s — Episode %d — %s",
+			description.Len()+1,
+			title,
+			episode.Episode,
+			when,
+		)
+
+		if !description.AddLine(line) {
+			break
+		}
+	}
+
+	footer := "Timezone: " + timezone
+
+	if description.Truncated() {
+		footer += " • Results truncated!"
 	}
 
 	MessageBuild().
 		Embed(
 			discord.NewEmbed().
 				WithTitle("Next Episodes").
-				WithDescription(
-					strings.Join(list, "\n"),
-				).
+				WithDescription(description.String()).
 				WithColor(ColorSuccess).
 				WithFooter(
-					"Timezone: "+timezone,
+					footer,
 					"",
 				),
 		).
@@ -703,38 +711,47 @@ func SeasonAnime(
 		return
 	}
 
-	var list []string
+	var description DescriptionBuilder
 
 	for i, anime := range result.Media {
-		title := anime.Title.Romaji
-
-		if anime.Title.English != "" &&
-			anime.Title.English != anime.Title.Romaji {
-			title = anime.Title.English +
-				" (" + anime.Title.Romaji + ")"
-		}
-
-		list = append(
-			list,
-			fmt.Sprintf("%d. %s", i+1, title),
+		title := getAnimeMinimalTitle(&anime)
+		title = fmt.Sprintf(
+			"[%s](https://anilist.co/anime/%d)",
+			title,
+			anime.Id,
 		)
+
+		line := fmt.Sprintf("%d. %s", i+1, title)
+
+		if !description.AddLine(line) {
+			break
+		}
+	}
+
+	embed := discord.NewEmbed().
+		WithTitle(
+			fmt.Sprintf(
+				"%s %d Anime",
+				formatSeason(season),
+				year,
+			),
+		).
+		WithURL(
+			fmt.Sprintf(
+				"https://anilist.co/search/anime?season=%s&seasonYear=%d",
+				season,
+				year,
+			),
+		).
+		WithDescription(description.String()).
+		WithColor(ColorSuccess)
+
+	if description.Truncated() {
+		embed = embed.WithFooter("Results truncated!", "")
 	}
 
 	MessageBuild().
-		Embed(
-			discord.NewEmbed().
-				WithTitle(
-					fmt.Sprintf(
-						"%s %d Anime",
-						formatSeason(season),
-						year,
-					),
-				).
-				WithDescription(
-					strings.Join(list, "\n"),
-				).
-				WithColor(ColorSuccess),
-		).
+		Embed(embed).
 		SendMessage(ctx, event)
 }
 
@@ -757,7 +774,6 @@ func NotifyAnimeCommand(
 		enableAnimeNotifications(
 			ctx,
 			event,
-			args["interval"],
 		)
 
 	case "disable":
@@ -812,17 +828,21 @@ func UntrackAnimeComponent(
 	handleTrackAnimeComponent(ctx, event, args, false)
 }
 
+var _AnimeCheckInterval = 30 * time.Minute
+
+func SetAnimeCheckInterval(interval time.Duration) {
+	_AnimeCheckInterval = interval
+}
+
 func CheckTrackedAnime(ctx *BotContext) {
 	type NotificationSetting struct {
 		guildID     snowflake.ID
-		interval    int64
 		lastChecked int64
 	}
 
 	rows, err := ctx.DB.Query(`
 		SELECT
 			n.guild_id,
-			n.interval,
 			n.last_checked
 		FROM guild_anime_notifications n
 		JOIN guilds g
@@ -836,6 +856,7 @@ func CheckTrackedAnime(ctx *BotContext) {
 		)
 		return
 	}
+	defer rows.Close()
 
 	var settings []NotificationSetting
 
@@ -844,7 +865,6 @@ func CheckTrackedAnime(ctx *BotContext) {
 
 		if err := rows.Scan(
 			&setting.guildID,
-			&setting.interval,
 			&setting.lastChecked,
 		); err != nil {
 			slog.Error(
@@ -862,15 +882,14 @@ func CheckTrackedAnime(ctx *BotContext) {
 			"failed while reading anime notification settings",
 			slog.Any("err", err),
 		)
+		return
 	}
-
-	rows.Close()
 
 	now := time.Now().Unix()
 	client := &http.Client{}
 
 	for _, setting := range settings {
-		if now-setting.lastChecked < setting.interval {
+		if time.Since(time.Unix(setting.lastChecked, 0)) < _AnimeCheckInterval {
 			continue
 		}
 
@@ -905,6 +924,48 @@ func CheckTrackedAnime(ctx *BotContext) {
 
 //-----------
 // Private functions
+
+type DescriptionBuilder struct {
+	value     strings.Builder
+	lineCount int
+	truncated bool
+}
+
+func (b *DescriptionBuilder) AddLine(line string) bool {
+	const maxLength = 4096
+
+	length := b.value.Len()
+
+	if length > 0 {
+		length++
+	}
+
+	if length+len(line) > maxLength {
+		b.truncated = true
+		return false
+	}
+
+	if b.value.Len() > 0 {
+		b.value.WriteByte('\n')
+	}
+
+	b.value.WriteString(line)
+	b.lineCount++
+
+	return true
+}
+
+func (b *DescriptionBuilder) String() string {
+	return b.value.String()
+}
+
+func (b *DescriptionBuilder) Len() int {
+	return b.lineCount
+}
+
+func (b *DescriptionBuilder) Truncated() bool {
+	return b.truncated
+}
 
 func htmlToMarkdown(value string) string {
 	value = html.UnescapeString(value)
@@ -1079,17 +1140,19 @@ func getUpcomingAnime(
 }
 
 func getAnimeTitle(anime *Media) string {
-	title := anime.Title.Romaji
-
-	if anime.Title.English != "" &&
-		anime.Title.English != anime.Title.Romaji {
-		title = anime.Title.English +
-			" (" +
-			anime.Title.Romaji +
-			")"
+	if anime.Title.English != "" {
+		return anime.Title.English
 	}
 
-	return title
+	return anime.Title.Romaji
+}
+
+func getAnimeMinimalTitle(anime *MediaMinimal) string {
+	if anime.Title.English != "" {
+		return anime.Title.English
+	}
+
+	return anime.Title.Romaji
 }
 
 func currentAnimeSeason() (string, int) {
@@ -1127,42 +1190,17 @@ func formatSeason(season string) string {
 func enableAnimeNotifications(
 	ctx *BotContext,
 	event *events.ApplicationCommandInteractionCreate,
-	value string,
 ) {
-	interval := 30 * time.Minute
-
-	if value != "" {
-		var err error
-
-		interval, err = time.ParseDuration(value)
-		if err != nil || interval <= 0 {
-			MessageBuild().
-				Embed(
-					discord.NewEmbed().
-						WithTitle("Invalid interval").
-						WithDescription(
-							"Use a duration such as `30m`, `1h`, or `2h30m`.",
-						).
-						WithColor(ColorError),
-				).
-				SendMessage(ctx, event)
-			return
-		}
-	}
-
 	_, err := ctx.DB.Exec(`
 		INSERT INTO guild_anime_notifications (
 			guild_id,
-			interval,
 			last_checked
 		)
-		VALUES (?, ?, 0)
+		VALUES (?, 0)
 		ON CONFLICT(guild_id)
-		DO UPDATE SET
-			interval = excluded.interval
+		DO NOTHING
 	`,
 		event.GuildID(),
-		int64(interval.Seconds()),
 	)
 
 	if err != nil {
@@ -1195,7 +1233,7 @@ func enableAnimeNotifications(
 				WithDescription(
 					fmt.Sprintf(
 						"Anime episodes will be checked every `%s`.",
-						interval,
+						_AnimeCheckInterval,
 					),
 				).
 				WithColor(ColorSuccess),
@@ -1565,6 +1603,7 @@ func notifyAnimeEpisode(
 
 	embed := discord.NewEmbed().
 		WithTitle("New episode released").
+		WithURL(fmt.Sprintf("https://anilist.co/anime/%d", anime.Id)).
 		WithDescription(description).
 		WithThumbnail(anime.CoverImage.Medium).
 		WithColor(getAnimeColor(anime)).
@@ -1585,6 +1624,7 @@ func notifyAnimeFinished(
 ) {
 	embed := discord.NewEmbed().
 		WithTitle("Anime finished").
+		WithURL(fmt.Sprintf("https://anilist.co/anime/%d", anime.Id)).
 		WithDescription(
 			fmt.Sprintf(
 				"**%s** has finished airing.",
