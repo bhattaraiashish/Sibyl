@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"html"
 	"log/slog"
 	"strings"
 	"time"
@@ -11,6 +12,8 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/events"
 	"github.com/disgoorg/snowflake/v2"
+
+	xhtml "golang.org/x/net/html"
 )
 
 var _RSSCheckInterval = 15 * time.Minute
@@ -452,7 +455,7 @@ func notifyRSSItem(
 	feedTitle string,
 	item *gofeed.Item,
 ) {
-	description := item.Description
+	description := recursiveHtmlToMarkdown(item.Description)
 
 	if description == "" {
 		description = item.Content
@@ -525,4 +528,145 @@ func getRSSItemID(item *gofeed.Item) string {
 	}
 
 	return item.Title
+}
+
+func recursiveHtmlToMarkdown(input string) string {
+	input = html.UnescapeString(input)
+
+	doc, err := xhtml.Parse(strings.NewReader(input))
+	if err != nil {
+		return input
+	}
+
+	var b strings.Builder
+	renderHTML(&b, doc)
+
+	return strings.TrimSpace(b.String())
+}
+
+func renderHTML(b *strings.Builder, node *xhtml.Node) {
+	if node.Type == xhtml.TextNode {
+		b.WriteString(node.Data)
+		return
+	}
+
+	if node.Type != xhtml.ElementNode {
+		renderChildren(b, node)
+		return
+	}
+
+	switch node.Data {
+	case "br":
+		b.WriteByte('\n')
+
+	case "p":
+		renderChildren(b, node)
+		b.WriteString("\n\n")
+
+	case "strong", "b":
+		b.WriteString("**")
+		renderChildren(b, node)
+		b.WriteString("**")
+
+	case "em", "i":
+		b.WriteString("*")
+		renderChildren(b, node)
+		b.WriteString("*")
+
+	case "del", "s", "strike":
+		b.WriteString("~~")
+		renderChildren(b, node)
+		b.WriteString("~~")
+
+	case "code":
+		b.WriteByte('`')
+		renderChildren(b, node)
+		b.WriteByte('`')
+
+	case "pre":
+		b.WriteString("```\n")
+		renderChildren(b, node)
+		b.WriteString("\n```\n")
+
+	case "a":
+		renderLink(b, node)
+
+	case "h1", "h2", "h3", "h4", "h5", "h6":
+		level := int(node.Data[1] - '0')
+		b.WriteString(strings.Repeat("#", level))
+		b.WriteByte(' ')
+		renderChildren(b, node)
+		b.WriteString("\n\n")
+
+	case "ul":
+		renderList(b, node, false)
+
+	case "ol":
+		renderList(b, node, true)
+
+	default:
+		renderChildren(b, node)
+	}
+}
+
+func renderChildren(b *strings.Builder, node *xhtml.Node) {
+	for child := node.FirstChild; child != nil; child = child.NextSibling {
+		renderHTML(b, child)
+	}
+}
+
+func renderLink(b *strings.Builder, node *xhtml.Node) {
+	var href string
+
+	for _, attr := range node.Attr {
+		if attr.Key == "href" {
+			href = attr.Val
+			break
+		}
+	}
+
+	if href == "" {
+		renderChildren(b, node)
+		return
+	}
+
+	var text strings.Builder
+	renderChildren(&text, node)
+
+	label := strings.TrimSpace(text.String())
+
+	if label == "" || label == href {
+		b.WriteByte('<')
+		b.WriteString(href)
+		b.WriteByte('>')
+		return
+	}
+
+	b.WriteByte('[')
+	b.WriteString(label)
+	b.WriteString("](")
+	b.WriteString(href)
+	b.WriteByte(')')
+}
+
+func renderList(b *strings.Builder, node *xhtml.Node, ordered bool) {
+	index := 1
+
+	for child := node.FirstChild; child != nil; child = child.NextSibling {
+		if child.Type != xhtml.ElementNode || child.Data != "li" {
+			continue
+		}
+
+		if ordered {
+			fmt.Fprintf(b, "%d. ", index)
+		} else {
+			b.WriteString("- ")
+		}
+
+		renderChildren(b, child)
+		b.WriteByte('\n')
+		index++
+	}
+
+	b.WriteByte('\n')
 }
