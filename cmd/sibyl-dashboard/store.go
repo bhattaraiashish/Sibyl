@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"log"
 	"log/slog"
 	"time"
@@ -109,6 +110,92 @@ func GetDatabaseCounts() DatabaseCounts {
 	}
 
 	return counts
+}
+
+func InsertSession(session UserSession) error {
+	_, err := _Database.Exec(`
+		INSERT INTO user_sessions (
+			id,
+			access_token,
+			refresh_token,
+			expires_at,
+			created_at
+		)
+		VALUES (?, ?, ?, ?, ?)
+	`,
+		session.ID,
+		session.AccessToken,
+		session.RefreshToken,
+		session.ExpiresAt.Unix(),
+		session.CreatedAt.Unix(),
+	)
+
+	return err
+}
+
+func FindSession(sessionID string) *UserSession {
+	var session UserSession
+	var expiresAt int64
+	var createdAt int64
+
+	err := _Database.QueryRow(`
+		SELECT
+			id,
+			access_token,
+			refresh_token,
+			expires_at,
+			created_at
+		FROM user_sessions
+		WHERE id = ?
+	`, sessionID).Scan(
+		&session.ID,
+		&session.AccessToken,
+		&session.RefreshToken,
+		&expiresAt,
+		&createdAt,
+	)
+
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			slog.Error("failed to find session", "error", err)
+		}
+
+		return nil
+	}
+
+	session.ExpiresAt = time.Unix(expiresAt, 0)
+	session.CreatedAt = time.Unix(createdAt, 0)
+
+	return &session
+}
+
+func UpdateSession(session UserSession) error {
+	_, err := _Database.Exec(`
+		UPDATE user_sessions
+		SET
+			access_token = ?,
+			refresh_token = ?,
+			expires_at = ?,
+			created_at = ?
+		WHERE id = ?
+	`,
+		session.AccessToken,
+		session.RefreshToken,
+		session.ExpiresAt.Unix(),
+		session.CreatedAt.Unix(),
+		session.ID,
+	)
+
+	return err
+}
+
+func DeleteSession(sessionID string) error {
+	_, err := _Database.Exec(`
+		DELETE FROM user_sessions
+		WHERE id = ?
+	`, sessionID)
+
+	return err
 }
 
 func GetDiscordUser(accessToken string) *UserData {
