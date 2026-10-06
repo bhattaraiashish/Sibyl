@@ -3,3 +3,5 @@ config.json
 *.exe
 *.log
 *.db
+*.db-shm
+*.db-wal

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/bhattaraiashish/Sibyl/internal/config"
 )
 
 var (
@@ -22,7 +24,7 @@ func StartDashboardUpdater() {
 	go func() {
 		updateDashboardData()
 
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(config.BotHeartbeatInterval)
 		defer ticker.Stop()
 
 		for range ticker.C {
@@ -38,7 +40,7 @@ func updateDashboardData() {
 	data := DashboardData{
 		BotName:       status.Username,
 		BotAvatar:     fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.png", status.UserID, status.Avatar),
-		Online:        time.Since(status.LastSeen) < 30*time.Second,
+		Online:        time.Since(status.LastSeen) < config.BotOnlineTimeout,
 		Latency:       status.Latency.Milliseconds(),
 		ConnectedAt:   status.ConnectedAt.Unix(),
 		TimezoneCount: counts.Timezones,

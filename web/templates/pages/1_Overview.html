@@ -9,7 +9,7 @@
     </div>
 </div>
 
-<div id="overview" hx-get="/api/overview" hx-trigger="every 30s" hx-swap="innerHTML">
+<div id="overview" hx-get="/api/overview" hx-trigger="every 5s" hx-swap="innerHTML">
     {{ template "overview-content" . }}
 </div>
 
@@ -46,7 +46,10 @@
 
     <div class="card">
         <div class="card-title">Uptime</div>
-        <div id="uptime" class="card-value" data-connected-at="{{ .Dashboard.ConnectedAt }}">00:00:00:00</div>
+        <div id="uptime" class="card-value" data-connected-at="{{ .Dashboard.ConnectedAt }}"
+            data-online="{{ .Dashboard.Online }}">
+            00:00:00:00
+        </div>
     </div>
 
     <div class="card">
@@ -64,35 +67,5 @@
         <div class="card-value">{{ .Dashboard.RSSFeeds }}</div>
     </div>
 </div>
-
-<script>
-    function updateUptime() {
-        const element = document.getElementById("uptime");
-        if (!element) { return; }
-
-        const connectedAt = Number(element.dataset.connectedAt);
-
-        if (!connectedAt) {
-            element.textContent = "00:00:00:00";
-            return;
-        }
-
-        const elapsed = Math.max(0, Math.floor(Date.now() / 1000) - connectedAt);
-
-        const days = Math.floor(elapsed / 86400);
-        const hours = Math.floor((elapsed % 86400) / 3600);
-        const minutes = Math.floor((elapsed % 3600) / 60);
-        const seconds = elapsed % 60;
-
-        element.textContent =
-            String(days).padStart(2, "0") + ":" +
-            String(hours).padStart(2, "0") + ":" +
-            String(minutes).padStart(2, "0") + ":" +
-            String(seconds).padStart(2, "0");
-    }
-
-    updateUptime();
-    setInterval(updateUptime, 1000);
-</script>
 
 {{ end }}

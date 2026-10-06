@@ -5,6 +5,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/bhattaraiashish/Sibyl/internal/config"
 	"github.com/disgoorg/disgo"
 	"github.com/disgoorg/disgo/bot"
 	"github.com/disgoorg/snowflake/v2"
@@ -35,10 +36,7 @@ type DatabaseCounts struct {
 func InitStore(token string) {
 	var err error
 
-	_Database, err = sql.Open("sqlite", "sibyl.db")
-	if err != nil {
-		log.Fatal(err)
-	}
+	_Database = config.LoadDatabase()
 
 	_Client, err = disgo.New(token)
 	if err != nil {
