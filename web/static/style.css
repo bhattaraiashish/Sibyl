@@ -131,87 +131,6 @@ body {
     cursor: pointer;
 }
 
-/* Activity */
-
-.activity {
-    margin-top: 24px;
-    padding: 18px;
-    background: #181818;
-    border: 1px solid #2a2a2a;
-    border-radius: 8px;
-}
-
-.activity-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 20px;
-}
-
-.activity-period {
-    color: #666;
-    font-size: 13px;
-}
-
-.activity-chart {
-    display: flex;
-    height: 220px;
-}
-
-.activity-y-axis {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    width: 40px;
-    padding: 0 10px 24px 0;
-    color: #666;
-    font-size: 11px;
-    text-align: right;
-}
-
-.activity-graph {
-    position: relative;
-    flex: 1;
-    min-width: 0;
-}
-
-.activity-grid {
-    position: absolute;
-    inset: 0 0 24px;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-}
-
-.activity-grid span {
-    width: 100%;
-    border-top: 1px solid #242424;
-}
-
-.activity-line {
-    position: absolute;
-    inset: 0 0 24px;
-    width: 100%;
-    height: calc(100% - 24px);
-    color: #aaa;
-    overflow: visible;
-}
-
-.activity-line circle {
-    fill: #aaa;
-}
-
-.activity-x-axis {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    display: flex;
-    justify-content: space-between;
-    color: #666;
-    font-size: 11px;
-}
-
 /* Sidebar */
 
 .sidebar {
@@ -289,9 +208,9 @@ body {
 /* Cards */
 
 .cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 16px;
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 1rem;
 }
 
 .card {
@@ -325,6 +244,10 @@ body {
     height: 8px;
     border-radius: 50%;
     background: #4caf50;
+}
+
+.status-dot.offline {
+    background: #777;
 }
 
 /* Buttons */

@@ -5,7 +5,6 @@ import (
 	"flag"
 	"log/slog"
 	"os"
-	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -43,15 +42,6 @@ func LoadFromConfigFile(path *string) config.SibylConfig {
 	}
 
 	return cfg
-}
-
-func LoadToken() string {
-	data, err := os.ReadFile("token")
-	if err != nil {
-		return ""
-	}
-
-	return strings.TrimSpace(string(data))
 }
 
 func watchConfig(path string, current config.SibylConfig) {
@@ -125,7 +115,7 @@ func main() {
 	//----------
 	// Start the bot
 
-	token := LoadToken()
+	token := config.LoadToken()
 	if token == "" {
 		panic("empty token file")
 	}
