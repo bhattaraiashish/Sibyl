@@ -75,6 +75,10 @@ func RegisterHandlers(mux *http.ServeMux) {
 		http.FileServer(http.Dir("web/static")),
 	))
 
+	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/static/favicon.ico")
+	})
+
 	mux.HandleFunc("/api/overview", overviewHandler)
 	mux.HandleFunc("/", pageHandler)
 }
