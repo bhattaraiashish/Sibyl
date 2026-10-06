@@ -119,7 +119,7 @@
     <div class="user-details">
         <div class="user-name">{{ .User.DisplayName }}</div>
         <div class="user-username">@{{ .User.Username }}</div>
-        <a class="user-action" href="/auth/logout">Logout</a>
+        <a class="user-action" href="/logout?page={{ .Page }}">Logout</a>
     </div>
 </div>
 {{ else }}
@@ -131,7 +131,7 @@
     <div class="user-details">
         <div class="user-name">Anonymous</div>
         <div class="user-username">@anonymous</div>
-        <a class="user-action" href="/auth/discord">Login</a>
+        <a class="user-action" href="/discord/auth?page={{ .Page }}">Login</a>
     </div>
 </div>
 {{ end }}

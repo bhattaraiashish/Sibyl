@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"log"
+	"log/slog"
 	"time"
 
 	"github.com/bhattaraiashish/Sibyl/internal/config"
@@ -108,4 +109,30 @@ func GetDatabaseCounts() DatabaseCounts {
 	}
 
 	return counts
+}
+
+func GetDiscordUser(accessToken string) *UserData {
+	user, err := _Client.Rest.GetCurrentUser(accessToken)
+	if err != nil {
+		slog.Error("failed to get Discord user", "error", err)
+		return nil
+	}
+
+	displayName := user.Username
+	if user.GlobalName != nil {
+		displayName = *user.GlobalName
+	}
+
+	avatarURL := user.AvatarURL()
+	if avatarURL == nil {
+		defaultAvatar := "/static/default-avatar.svg"
+		avatarURL = &defaultAvatar
+	}
+
+	return &UserData{
+		ID:          user.ID.String(),
+		DisplayName: displayName,
+		Username:    user.Username,
+		AvatarURL:   *avatarURL,
+	}
 }

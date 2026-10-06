@@ -1,16 +1,55 @@
 package main
 
 import (
+	"encoding/json"
+	"log/slog"
 	"net/http"
+	"net/url"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"text/template"
+	"time"
+
+	"github.com/google/uuid"
 )
 
+type UserSession struct {
+	ID             string
+	AccessToken    string
+	RefreshToken   string
+	ExpiresAt      time.Time
+	CreatedAt      time.Time
+	CachedUserData *UserData
+}
+
+type SessionCache struct {
+	sync.RWMutex
+	data map[string]UserSession
+}
+
+type DiscordTokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int    `json:"expires_in"`
+	RefreshToken string `json:"refresh_token"`
+	Scope        string `json:"scope"`
+}
+
 var (
-	_Pages     []Page
-	_Templates map[string]*template.Template
+	_Pages        []Page
+	_Templates    map[string]*template.Template
+	_SessionCache = SessionCache{
+		data: make(map[string]UserSession),
+	}
+)
+
+const (
+	_SessionCookieName     = "sibyl_session"
+	_OAuthStateCookieName  = "sibyl_oauth_state"
+	_OAuthReturnCookieName = "sibyl_oauth_return"
 )
 
 func InitPages() {
@@ -47,26 +86,21 @@ func InitPages() {
 			Title: title,
 		})
 
-		tmpl, err := template.ParseFiles(
-			"web/templates/layout.html",
-			file,
+		_Templates[id] = template.Must(
+			template.ParseFiles("web/templates/layout.html", file),
 		)
-		if err != nil {
-			panic(err)
-		}
-
-		_Templates[id] = tmpl
 	}
 
-	tmpl, err := template.ParseFiles(
-		"web/templates/layout.html",
-		"web/templates/404.html",
+	_Templates["404"] = template.Must(
+		template.ParseFiles(
+			"web/templates/layout.html",
+			"web/templates/404.html",
+		),
 	)
-	if err != nil {
-		panic(err)
-	}
 
-	_Templates["404"] = tmpl
+	_Templates["error"] = template.Must(
+		template.ParseFiles("web/templates/error.html"),
+	)
 }
 
 func RegisterHandlers(mux *http.ServeMux) {
@@ -79,8 +113,116 @@ func RegisterHandlers(mux *http.ServeMux) {
 		http.ServeFile(w, r, "web/static/favicon.ico")
 	})
 
+	mux.HandleFunc("/discord/auth", discordLoginHandler)
+	mux.HandleFunc("/discord/callback", discordLoginCallbackHandler)
+	mux.HandleFunc("/logout", logoutHandler)
+
 	mux.HandleFunc("/api/overview", overviewHandler)
 	mux.HandleFunc("/", pageHandler)
+}
+
+func discordLoginHandler(w http.ResponseWriter, r *http.Request) {
+	state := uuid.NewString()
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     _OAuthStateCookieName,
+		Value:    state,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     _OAuthReturnCookieName,
+		Value:    r.URL.Query().Get("page"),
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	authURL := "https://discord.com/oauth2/authorize?" + url.Values{
+		"client_id":     {os.Getenv("DISCORD_CLIENT_ID")},
+		"redirect_uri":  {os.Getenv("DISCORD_REDIRECT_URL")},
+		"response_type": {"code"},
+		"scope":         {"identify guilds"},
+		"state":         {state},
+	}.Encode()
+
+	http.Redirect(w, r, authURL, http.StatusFound)
+}
+
+func discordLoginCallbackHandler(w http.ResponseWriter, r *http.Request) {
+	returnTo := "/"
+	if returnCookie, err := r.Cookie(_OAuthReturnCookieName); err == nil {
+		if returnCookie.Value != "" {
+			returnTo = returnCookie.Value
+		}
+	}
+
+	state := r.URL.Query().Get("state")
+	cookie, err := r.Cookie(_OAuthStateCookieName)
+	if err != nil || state == "" || state != cookie.Value {
+		renderError(
+			w,
+			http.StatusBadRequest,
+			"Invalid OAuth state",
+			"The login request is invalid or has expired.",
+			returnTo,
+		)
+		return
+	}
+
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		renderError(
+			w,
+			http.StatusBadRequest,
+			"Missing authorization code",
+			"Discord did not provide an authorization code.",
+			returnTo,
+		)
+		return
+	}
+
+	token := exchangeDiscordToken(code)
+	if token == nil {
+		renderError(
+			w,
+			http.StatusBadRequest,
+			"Discord login failed",
+			"Failed to authenticate with Discord.",
+			returnTo,
+		)
+		return
+	}
+
+	createSession(w, *token)
+	http.Redirect(w, r, returnTo, http.StatusSeeOther)
+}
+
+func logoutHandler(w http.ResponseWriter, r *http.Request) {
+	returnTo := r.URL.Query().Get("page")
+	if returnTo == "" {
+		returnTo = "/"
+	}
+
+	if cookie, err := r.Cookie(_SessionCookieName); err == nil {
+		removeSession(cookie.Value)
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     _SessionCookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	http.Redirect(w, r, returnTo, http.StatusSeeOther)
 }
 
 func pageHandler(w http.ResponseWriter, r *http.Request) {
@@ -91,12 +233,7 @@ func pageHandler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		layout := LayoutData{
-			Title:       page.Title,
-			Page:        page.ID,
-			Pages:       _Pages,
-			SearchQuery: query,
-		}
+		layout := createLayout(r, page, query)
 
 		var data any
 
@@ -129,12 +266,17 @@ func pageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	render404(w)
+	render404(w, r)
 }
 
 func overviewHandler(w http.ResponseWriter, r *http.Request) {
+	page := Page{
+		Title: "Overview",
+		Path:  r.URL.Path,
+	}
 	data := OverviewData{
-		Dashboard: GetDashboardData(),
+		LayoutData: createLayout(r, page, ""),
+		Dashboard:  GetDashboardData(),
 	}
 
 	if err := _Templates["overview"].ExecuteTemplate(
@@ -146,15 +288,237 @@ func overviewHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func render404(w http.ResponseWriter) {
+func render404(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
 
-	data := LayoutData{
-		Title: "404",
-		Pages: _Pages,
+	page := Page{
+		Title: "Not Found",
+		Path:  r.URL.Path,
 	}
+	data := createLayout(r, page, "")
 
 	if err := _Templates["404"].ExecuteTemplate(w, "layout", data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func renderError(w http.ResponseWriter, status int, title, message, returnTo string) {
+	w.WriteHeader(status)
+
+	data := ErrorData{
+		Title:    title,
+		Message:  message,
+		ReturnTo: returnTo,
+	}
+
+	if err := _Templates["error"].Execute(w, data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+//------------------------
+// Sessions
+
+func createSession(w http.ResponseWriter, token DiscordTokenResponse) *UserSession {
+	now := time.Now()
+
+	session := UserSession{
+		ID:           uuid.NewString(),
+		AccessToken:  token.AccessToken,
+		RefreshToken: token.RefreshToken,
+		CreatedAt:    now,
+		ExpiresAt:    now.Add(time.Duration(token.ExpiresIn) * time.Second),
+	}
+
+	_SessionCache.Lock()
+	_SessionCache.data[session.ID] = session
+	_SessionCache.Unlock()
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     _SessionCookieName,
+		Value:    session.ID,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	return &session
+}
+
+func getSession(r *http.Request) *UserSession {
+	cookie, err := r.Cookie(_SessionCookieName)
+	if err != nil {
+		return nil
+	}
+
+	_SessionCache.RLock()
+	session, ok := _SessionCache.data[cookie.Value]
+	_SessionCache.RUnlock()
+
+	if !ok {
+		return nil
+	}
+
+	now := time.Now()
+
+	if now.Add(time.Minute).After(session.ExpiresAt) {
+		token := refreshDiscordToken(session.RefreshToken)
+		if token == nil {
+			_SessionCache.Lock()
+			delete(_SessionCache.data, session.ID)
+			_SessionCache.Unlock()
+			return nil
+		}
+
+		session.AccessToken = token.AccessToken
+
+		if token.RefreshToken != "" {
+			session.RefreshToken = token.RefreshToken
+		}
+
+		session.ExpiresAt = now.Add(
+			time.Duration(token.ExpiresIn) * time.Second,
+		)
+
+		_SessionCache.Lock()
+		_SessionCache.data[session.ID] = session
+		_SessionCache.Unlock()
+	}
+
+	return &session
+}
+
+func removeSession(sessionID string) {
+	_SessionCache.Lock()
+	delete(_SessionCache.data, sessionID)
+	_SessionCache.Unlock()
+}
+
+func createLayout(r *http.Request, page Page, query string) LayoutData {
+	layout := LayoutData{
+		Title:       page.Title,
+		Page:        page.Path,
+		Pages:       _Pages,
+		SearchQuery: query,
+	}
+
+	session := getSession(r)
+	if session == nil {
+		return layout
+	}
+
+	if session.CachedUserData == nil {
+		user := GetDiscordUser(session.AccessToken)
+		if user == nil {
+			return layout
+		}
+
+		session.CachedUserData = user
+
+		_SessionCache.Lock()
+		_SessionCache.data[session.ID] = *session
+		_SessionCache.Unlock()
+	}
+
+	layout.User = session.CachedUserData
+
+	return layout
+}
+
+//------------------------------------
+// Discord
+
+func refreshDiscordToken(refreshToken string) *DiscordTokenResponse {
+	values := url.Values{
+		"grant_type":    {"refresh_token"},
+		"refresh_token": {refreshToken},
+	}
+
+	req, err := http.NewRequest(
+		http.MethodPost,
+		"https://discord.com/api/oauth2/token",
+		strings.NewReader(values.Encode()),
+	)
+	if err != nil {
+		slog.Error("failed to create Discord token refresh request", "error", err)
+		return nil
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth(
+		os.Getenv("DISCORD_CLIENT_ID"),
+		os.Getenv("DISCORD_CLIENT_SECRET"),
+	)
+
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		slog.Error("failed to refresh Discord token", "error", err)
+		return nil
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		slog.Error(
+			"Discord token refresh failed",
+			"status", response.Status,
+		)
+		return nil
+	}
+
+	var token DiscordTokenResponse
+	if err := json.NewDecoder(response.Body).Decode(&token); err != nil {
+		slog.Error("failed to decode Discord token response", "error", err)
+		return nil
+	}
+
+	return &token
+}
+
+func exchangeDiscordToken(code string) *DiscordTokenResponse {
+	values := url.Values{
+		"grant_type":   {"authorization_code"},
+		"code":         {code},
+		"redirect_uri": {os.Getenv("DISCORD_REDIRECT_URL")},
+	}
+
+	req, err := http.NewRequest(
+		http.MethodPost,
+		"https://discord.com/api/oauth2/token",
+		strings.NewReader(values.Encode()),
+	)
+	if err != nil {
+		slog.Error("failed to create Discord token request", "error", err)
+		return nil
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth(
+		os.Getenv("DISCORD_CLIENT_ID"),
+		os.Getenv("DISCORD_CLIENT_SECRET"),
+	)
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		slog.Error("failed to exchange Discord authorization code", "error", err)
+		return nil
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		slog.Error(
+			"Discord token exchange failed",
+			"status", res.Status,
+		)
+		return nil
+	}
+
+	var token DiscordTokenResponse
+
+	if err := json.NewDecoder(res.Body).Decode(&token); err != nil {
+		slog.Error("failed to decode Discord token response", "error", err)
+		return nil
+	}
+
+	return &token
 }

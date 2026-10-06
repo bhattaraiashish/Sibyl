@@ -17,6 +17,7 @@ type Guild struct {
 }
 
 type UserData struct {
+	ID          string
 	DisplayName string
 	Username    string
 	AvatarURL   string
@@ -56,4 +57,10 @@ type GuildsData struct {
 type SettingsData struct {
 	LayoutData
 	Config config.SibylConfigFile
+}
+
+type ErrorData struct {
+	Title    string
+	Message  string
+	ReturnTo string
 }

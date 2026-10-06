@@ -2,10 +2,11 @@ package config
 
 import (
 	"database/sql"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
-	"strings"
 	"time"
 )
 
@@ -24,13 +25,28 @@ type SibylConfigFile struct {
 	NotificationInterval string `json:"notification_interval"`
 }
 
-func LoadToken() string {
-	data, err := os.ReadFile("token")
+func LoadEnvFile() {
+	data, err := os.ReadFile("env.json")
 	if err != nil {
-		return ""
+		if errors.Is(err, os.ErrNotExist) {
+			return
+		}
+
+		slog.Error("failed to read env.json", "error", err)
+		return
 	}
 
-	return strings.TrimSpace(string(data))
+	var env map[string]string
+	if err := json.Unmarshal(data, &env); err != nil {
+		slog.Error("failed to parse env.json", "error", err)
+		return
+	}
+
+	for key, value := range env {
+		if err := os.Setenv(key, value); err != nil {
+			slog.Error("failed to set environment variable", "key", key, "error", err)
+		}
+	}
 }
 
 func LoadDatabase() *sql.DB {

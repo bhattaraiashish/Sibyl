@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .Title }} · Sibyl</title>
+    <link rel="icon" href="/favicon.ico">
+
+    <style>
+        :root {
+            --background: #0f1115;
+            --surface: #171a21;
+            --border: #282d37;
+            --text-primary: #f0f1f3;
+            --text-secondary: #9299a6;
+            --accent: #7289da;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: var(--background);
+            color: var(--text-primary);
+            font-family: system-ui, -apple-system, BlinkMacSystemFont,
+                "Segoe UI", sans-serif;
+        }
+
+        .error {
+            width: 100%;
+            max-width: 420px;
+            padding: 32px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--surface);
+            text-align: center;
+        }
+
+        .error-icon {
+            width: 48px;
+            height: 48px;
+            margin: 0 auto 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background: rgba(114, 137, 218, 0.12);
+            color: var(--accent);
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        h1 {
+            margin: 0 0 10px;
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        p {
+            margin: 0 0 24px;
+            color: var(--text-secondary);
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        a {
+            display: inline-block;
+            padding: 9px 16px;
+            border-radius: 6px;
+            background: var(--accent);
+            color: #fff;
+            font-size: 14px;
+            font-weight: 500;
+            text-decoration: none;
+        }
+
+        a:hover {
+            filter: brightness(1.1);
+        }
+    </style>
+</head>
+
+<body>
+    <main class="error">
+        <div class="error-icon">!</div>
+
+        <h1>{{ .Title }}</h1>
+        <p>{{ .Message }}</p>
+
+        <a href="{{ .ReturnTo }}">Go Back</a>
+    </main>
+</body>
+</html>
