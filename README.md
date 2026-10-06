@@ -5,7 +5,8 @@ Sibyl is a Discord bot written in Go with a web dashboard.
 ## Requirements
 
 * Go 1.24 or newer
-* A Discord bot application and token
+* A Discord bot application
+* A Discord OAuth2 application
 * SQLite
 
 ## Building
@@ -34,22 +35,35 @@ go run ./cmd/sibyl-dashboard
 
 ## Configuration
 
-Sibyl uses two separate files:
+Sibyl uses two separate JSON files:
 
 * `config.json` — application settings
-* `token` — Discord bot token
+* `env.json` — environment variables and secrets
 
-Keeping the token separate prevents it from being stored in the JSON configuration or exposed through the dashboard.
+### Environment file
 
-### Discord token
+Create an `env.json` file:
 
-Create a file named `token` containing only your Discord bot token:
-
-```text
-YOUR_DISCORD_BOT_TOKEN
+```json
+{
+    "SIBYL_DEBUG": "true",
+    "SIBYL_PORT": "8080",
+    "DISCORD_BOT_TOKEN": "YOUR_DISCORD_BOT_TOKEN",
+    "DISCORD_CLIENT_ID": "YOUR_DISCORD_CLIENT_ID",
+    "DISCORD_CLIENT_SECRET": "YOUR_DISCORD_CLIENT_SECRET",
+    "DISCORD_REDIRECT_URL": "http://localhost:8080/discord/callback"
+}
 ```
 
-The token file is read automatically when Sibyl starts. It is not specified through a command-line option.
+`SIBYL_DEBUG` enables debug mode.
+
+`SIBYL_PORT` specifies the port used by the dashboard.
+
+`DISCORD_BOT_TOKEN` is the Discord bot token.
+
+`DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET` are the Discord OAuth2 application credentials.
+
+`DISCORD_REDIRECT_URL` is the OAuth2 callback URL registered with Discord.
 
 ### Configuration file
 
@@ -88,12 +102,6 @@ Start the bot with:
 ./sibyl -config ./config.json
 ```
 
-Enable debug mode with:
-
-```bash
-./sibyl -config ./config.json -debug
-```
-
 In debug mode, all commands are registered per guild instead of globally. This allows command changes to take effect immediately during development.
 
 ### Command-line options
@@ -112,7 +120,7 @@ For example:
 ./sibyl -config ./config.json -debug
 ```
 
-The bot reads the Discord token from the `token` file and initializes its database and Discord connection automatically when started.
+The bot reads its environment variables from `env.json` and initializes its database and Discord connection automatically when started.
 
 ## Dashboard
 
@@ -130,23 +138,15 @@ Run it with:
 ./sibyl-dashboard
 ```
 
-The dashboard listens on port `80` by default.
-
-To use a different port:
-
-```bash
-./sibyl-dashboard -port 8080
-```
+The dashboard port is configured using `SIBYL_PORT` in `env.json`.
 
 Or run it directly during development:
 
 ```bash
-go run ./cmd/sibyl-dashboard -port 8080
+go run ./cmd/sibyl-dashboard
 ```
 
-The dashboard uses the same `config.json` file as the bot. The Settings page loads the configuration file when the page is opened, so changes to the configuration are reflected without restarting the dashboard.
-
-The Discord token is stored separately in the `token` file and is not part of the dashboard configuration.
+Discord OAuth2 login is configured using the Discord variables in `env.json`.
 
 ## Running Both
 
@@ -157,7 +157,7 @@ Run the bot and dashboard as separate processes:
 ```
 
 ```bash
-./sibyl-dashboard -port 8080
+./sibyl-dashboard
 ```
 
-The bot and dashboard share the same SQLite database and configuration file.
+The bot and dashboard share the same SQLite database, `config.json`, and `env.json`.
