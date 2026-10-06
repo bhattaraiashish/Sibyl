@@ -9,15 +9,25 @@
     </div>
 </div>
 
+<div id="overview" hx-get="/api/overview" hx-trigger="every 30s" hx-swap="innerHTML">
+    {{ template "overview-content" . }}
+</div>
+
+{{ end }}
+
+
+{{ define "overview-content" }}
+
 <div class="bot-profile">
-    <img class="bot-avatar" src="/static/bot.png" alt="Sibyl">
+    <img class="bot-avatar" src="{{ .Dashboard.BotAvatar }}" alt="{{ .Dashboard.BotName }}">
 
     <div class="bot-info">
-        <div class="bot-name">Sibyl</div>
+        <div class="bot-name">{{ .Dashboard.BotName }}</div>
+
         <div class="bot-status">
             <span class="status">
-                <span class="status-dot"></span>
-                Online
+                <span class="status-dot {{ if not .Dashboard.Online }}offline{{ end }}"></span>
+                {{ if .Dashboard.Online }}Online{{ else }}Offline{{ end }}
             </span>
         </div>
     </div>
@@ -26,102 +36,63 @@
 <div class="cards">
     <div class="card">
         <div class="card-title">Guilds</div>
-        <div class="card-value">12</div>
+        <div class="card-value">{{ .Dashboard.GuildCount }}</div>
     </div>
 
     <div class="card">
-        <div class="card-title">Users</div>
-        <div class="card-value">248</div>
+        <div class="card-title">Latency</div>
+        <div class="card-value">{{ .Dashboard.Latency }} ms</div>
     </div>
 
     <div class="card">
-        <div class="card-title">RSS Feeds</div>
-        <div class="card-value">34</div>
+        <div class="card-title">Uptime</div>
+        <div id="uptime" class="card-value" data-connected-at="{{ .Dashboard.ConnectedAt }}">00:00:00:00</div>
     </div>
 
     <div class="card">
-        <div class="card-title">Anime</div>
-        <div class="card-value">18</div>
+        <div class="card-title">Timezones</div>
+        <div class="card-value">{{ .Dashboard.TimezoneCount }}</div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">Animes</div>
+        <div class="card-value">{{ .Dashboard.AnimeCount }}</div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">RSS</div>
+        <div class="card-value">{{ .Dashboard.RSSFeeds }}</div>
     </div>
 </div>
 
-<div class="activity">
-    <div class="activity-header">
-        <div class="card-title">Activity</div>
-        <div class="activity-period">Last 14 days</div>
-    </div>
+<script>
+    function updateUptime() {
+        const element = document.getElementById("uptime");
+        if (!element) { return; }
 
-    <div class="activity-chart">
-        <div class="activity-y-axis">
-            <span>100</span>
-            <span>75</span>
-            <span>50</span>
-            <span>25</span>
-            <span>0</span>
-        </div>
+        const connectedAt = Number(element.dataset.connectedAt);
 
-        <div class="activity-graph">
-            <div class="activity-grid">
-                <span></span>
-                <span></span>
-                <span></span>
-                <span></span>
-                <span></span>
-            </div>
+        if (!connectedAt) {
+            element.textContent = "00:00:00:00";
+            return;
+        }
 
-            <svg class="activity-line" viewBox="0 0 1400 200" preserveAspectRatio="none"
-                aria-label="Activity over the last 14 days">
-                <polyline points="
-                    0,145
-                    108,120
-                    215,135
-                    323,70
-                    431,95
-                    538,45
-                    646,80
-                    754,110
-                    862,85
-                    969,125
-                    1077,65
-                    1185,90
-                    1292,50
-                    1400,75
-                " fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke" />
+        const elapsed = Math.max(0, Math.floor(Date.now() / 1000) - connectedAt);
 
-                <circle cx="0" cy="145" r="4" />
-                <circle cx="108" cy="120" r="4" />
-                <circle cx="215" cy="135" r="4" />
-                <circle cx="323" cy="70" r="4" />
-                <circle cx="431" cy="95" r="4" />
-                <circle cx="538" cy="45" r="4" />
-                <circle cx="646" cy="80" r="4" />
-                <circle cx="754" cy="110" r="4" />
-                <circle cx="862" cy="85" r="4" />
-                <circle cx="969" cy="125" r="4" />
-                <circle cx="1077" cy="65" r="4" />
-                <circle cx="1185" cy="90" r="4" />
-                <circle cx="1292" cy="50" r="4" />
-                <circle cx="1400" cy="75" r="4" />
-            </svg>
+        const days = Math.floor(elapsed / 86400);
+        const hours = Math.floor((elapsed % 86400) / 3600);
+        const minutes = Math.floor((elapsed % 3600) / 60);
+        const seconds = elapsed % 60;
 
-            <div class="activity-x-axis">
-                <span>Mon</span>
-                <span>Tue</span>
-                <span>Wed</span>
-                <span>Thu</span>
-                <span>Fri</span>
-                <span>Sat</span>
-                <span>Sun</span>
-                <span>Mon</span>
-                <span>Tue</span>
-                <span>Wed</span>
-                <span>Thu</span>
-                <span>Fri</span>
-                <span>Sat</span>
-                <span>Sun</span>
-            </div>
-        </div>
-    </div>
-</div>
+        element.textContent =
+            String(days).padStart(2, "0") + ":" +
+            String(hours).padStart(2, "0") + ":" +
+            String(minutes).padStart(2, "0") + ":" +
+            String(seconds).padStart(2, "0");
+    }
+
+    updateUptime();
+    setInterval(updateUptime, 1000);
+</script>
 
 {{ end }}

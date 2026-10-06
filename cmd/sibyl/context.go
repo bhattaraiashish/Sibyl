@@ -493,6 +493,10 @@ func (ctx *BotContext) Login(token string) error {
 		bot.WithEventListenerFunc(func(event *events.Ready) {
 			ctx.RegisterCommands()
 			ctx.StartTimers()
+			registerConnected(ctx, event)
+		}),
+		bot.WithEventListenerFunc(func(event *events.UserUpdate) {
+			updateBotProfile(ctx, event)
 		}),
 		bot.WithEventListenerFunc(func(event *events.GuildJoin) {
 			if err := ctx.SyncGuildCommands(event.Guild.ID); err != nil {
@@ -532,6 +536,8 @@ func (ctx *BotContext) Login(token string) error {
 		ctx.DB.Close()
 		return err
 	}
+
+	startStatusHeartbeat(db, client)
 
 	slog.Info("Sibyl is now running. Press CTRL-C to exit.")
 
@@ -938,6 +944,93 @@ func resolveAutocomplete(
 	return command
 }
 
+func registerConnected(ctx *BotContext, event *events.Ready) {
+	now := time.Now().Unix()
+	user := event.User
+	latency := event.Client().Gateway.Latency().Milliseconds()
+
+	_, err := ctx.DB.Exec(`
+		INSERT INTO bot_status (
+			id,
+			user_id,
+			username,
+			avatar,
+			connected_at,
+			last_seen,
+			latency
+		)
+		VALUES (1, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			user_id = excluded.user_id,
+			username = excluded.username,
+			avatar = excluded.avatar,
+			connected_at = excluded.connected_at,
+			last_seen = excluded.last_seen,
+			latency = excluded.latency
+	`,
+		user.ID,
+		user.Username,
+		user.Avatar,
+		now,
+		now,
+		latency,
+	)
+
+	if err != nil {
+		slog.Error("failed to register bot connection", "error", err)
+		return
+	}
+}
+
+func updateBotProfile(ctx *BotContext, event *events.UserUpdate) {
+	if event.User.ID != ctx.Client.ID() {
+		return
+	}
+
+	_, err := ctx.DB.Exec(`
+		UPDATE bot_status
+		SET
+			username = ?,
+			avatar = ?
+		WHERE id = 1
+	`,
+		event.User.Username,
+		event.User.Avatar,
+	)
+
+	if err != nil {
+		slog.Error("failed to update bot profile", "error", err)
+	}
+}
+
+func startStatusHeartbeat(db *sql.DB, client *bot.Client) {
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			updateLastSeen(db, client)
+		}
+	}()
+}
+
+func updateLastSeen(db *sql.DB, client *bot.Client) {
+	_, err := db.Exec(`
+		UPDATE bot_status
+		SET
+			last_seen = ?,
+			latency = ?
+		WHERE id = 1
+	`,
+		time.Now().Unix(),
+		client.Gateway.Latency().Milliseconds(),
+	)
+
+	if err != nil {
+		slog.Error("failed to update bot status", "error", err)
+	}
+}
+
 func initDatabase(db *sql.DB) error {
 	_, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS guilds (
@@ -971,6 +1064,16 @@ func initDatabase(db *sql.DB) error {
 			url TEXT NOT NULL,
 			last_item_id TEXT,
 			last_checked INTEGER NOT NULL DEFAULT 0
+		);
+
+		CREATE TABLE IF NOT EXISTS bot_status (
+			id INTEGER PRIMARY KEY CHECK (id = 1),
+			user_id INTEGER NOT NULL DEFAULT 0,
+			username TEXT NOT NULL DEFAULT '',
+			avatar TEXT NOT NULL DEFAULT '',
+			connected_at INTEGER NOT NULL DEFAULT 0,
+			last_seen INTEGER NOT NULL DEFAULT 0,
+			latency INTEGER NOT NULL DEFAULT 0
 		);
 	`)
 
