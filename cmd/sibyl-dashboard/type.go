@@ -16,6 +16,12 @@ type Guild struct {
 	Icon string
 }
 
+type UserData struct {
+	DisplayName string
+	Username    string
+	AvatarURL   string
+}
+
 type LayoutData struct {
 	Title         string
 	Page          string
@@ -23,6 +29,7 @@ type LayoutData struct {
 	SearchQuery   string
 	Guilds        []Guild
 	SelectedGuild Guild
+	User          *UserData
 }
 
 type DashboardData struct {

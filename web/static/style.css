@@ -231,6 +231,67 @@ body {
     font-weight: 600;
 }
 
+/* User profile */
+
+.user-profile {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.user-avatar {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.user-avatar-default {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+    overflow: hidden;
+}
+
+.user-avatar-default img {
+    width: 70%;
+    height: 70%;
+    object-fit: contain;
+}
+
+.user-details {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.user-name {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 18px;
+}
+
+.user-username {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 17px;
+}
+
+.user-action {
+    margin-top: 1px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 16px;
+    text-decoration: none;
+}
+
+.user-action:hover {
+    color: var(--text-primary);
+    text-decoration: underline;
+}
+
 /* Status */
 
 .status {
