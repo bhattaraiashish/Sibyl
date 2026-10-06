@@ -140,7 +140,7 @@ func AnimeSearch(
 	if description == "" {
 		description = "No description available."
 	} else {
-		description = htmlToMarkdown(description)
+		description = simpleHtmlToMarkdown(description)
 	}
 
 	if len(description) > 4096 {
@@ -983,7 +983,7 @@ func (b *DescriptionBuilder) Truncated() bool {
 	return b.truncated
 }
 
-func htmlToMarkdown(value string) string {
+func simpleHtmlToMarkdown(value string) string {
 	value = html.UnescapeString(value)
 
 	replacements := []struct {
