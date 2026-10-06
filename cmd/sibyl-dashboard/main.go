@@ -2,12 +2,12 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -15,24 +15,23 @@ import (
 )
 
 func main() {
-	port := flag.Int("port", 80, "HTTP server port")
-	flag.Parse()
-
-	token := config.LoadToken()
-	if token == "" {
-		panic("empty token file")
-	}
-
-	InitStore(token)
+	config.LoadEnvFile()
+	InitStore(os.Getenv("DISCORD_BOT_TOKEN"))
 
 	InitPages()
 	StartDashboardUpdater()
+
+	port := 80
+
+	if value := os.Getenv("SIBYL_PORT"); value != "" {
+		port, _ = strconv.Atoi(value)
+	}
 
 	mux := http.NewServeMux()
 	RegisterHandlers(mux)
 
 	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", *port),
+		Addr:    fmt.Sprintf(":%d", port),
 		Handler: mux,
 	}
 
@@ -44,11 +43,7 @@ func main() {
 	defer stop()
 
 	go func() {
-		log.Printf(
-			"Sibyl Dashboard listening on http://localhost:%d",
-			*port,
-		)
-
+		log.Printf("Sibyl Dashboard listening on http://localhost:%d", port)
 		if err := server.ListenAndServe(); err != nil &&
 			err != http.ErrServerClosed {
 			log.Fatal(err)

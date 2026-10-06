@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log/slog"
 	"os"
+	"strconv"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -84,7 +85,8 @@ func watchConfig(path string, current config.SibylConfig) {
 }
 
 func main() {
-	debug := flag.Bool("debug", false, "enable debug mode")
+	config.LoadEnvFile()
+
 	configPath := flag.String("config", "", "path to config.json file")
 	flag.Parse()
 
@@ -94,7 +96,7 @@ func main() {
 	SetRSSCheckInterval(cfg.NotificationInterval)
 
 	ctx := &BotContext{}
-	ctx.IsDebug = *debug
+	ctx.IsDebug, _ = strconv.ParseBool(os.Getenv("SIBYL_DEBUG"))
 
 	//----------
 	// Register commands
@@ -114,13 +116,7 @@ func main() {
 
 	//----------
 	// Start the bot
-
-	token := config.LoadToken()
-	if token == "" {
-		panic("empty token file")
-	}
-
-	if err := ctx.Login(token); err != nil {
+	if err := ctx.Login(os.Getenv("DISCORD_BOT_TOKEN")); err != nil {
 		slog.Error("failed to login", slog.Any("err", err))
 		return
 	}
