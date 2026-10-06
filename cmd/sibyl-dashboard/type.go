@@ -11,9 +11,11 @@ type Page struct {
 }
 
 type Guild struct {
-	ID   string
-	Name string
-	Icon string
+	ID       string
+	Name     string
+	Icon     string
+	Features []string
+	CanEdit  bool
 }
 
 type UserData struct {
@@ -24,13 +26,14 @@ type UserData struct {
 }
 
 type LayoutData struct {
-	Title         string
-	Page          string
-	Pages         []Page
-	SearchQuery   string
-	Guilds        []Guild
-	SelectedGuild Guild
-	User          *UserData
+	Title           string
+	Page            string
+	Pages           []Page
+	SearchQuery     string
+	Guilds          []Guild
+	GuildLoadFailed bool
+	SelectedGuild   Guild
+	User            *UserData
 }
 
 type DashboardData struct {
@@ -52,6 +55,15 @@ type OverviewData struct {
 
 type GuildsData struct {
 	LayoutData
+	GuildList []GuildFeatureData
+	Saved     bool
+	Message   string
+}
+
+type GuildFeatureData struct {
+	Guild
+	InitialFeatures int64
+	ShowOptions     bool
 }
 
 type SettingsData struct {

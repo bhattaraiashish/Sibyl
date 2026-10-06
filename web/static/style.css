@@ -479,6 +479,12 @@ body {
 }
 
 /* Guilds */
+#guild-features-controls {
+    border: 0;
+    margin: 0;
+    padding: 0;
+    min-width: 0;
+}
 
 .guild-info,
 .user-info {
@@ -681,4 +687,3 @@ body {
         grid-row: 1 / 3;
     }
 }
-

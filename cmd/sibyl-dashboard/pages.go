@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"html/template"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -10,7 +11,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"text/template"
 	"time"
 
 	"github.com/google/uuid"
@@ -86,9 +86,7 @@ func InitPages() {
 			Title: title,
 		})
 
-		_Templates[id] = template.Must(
-			template.ParseFiles("web/templates/layout.html", file),
-		)
+		_Templates[id] = template.Must(template.ParseFiles("web/templates/layout.html", file))
 	}
 
 	_Templates["404"] = template.Must(
@@ -118,6 +116,10 @@ func RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("/logout", logoutHandler)
 
 	mux.HandleFunc("/api/overview", overviewHandler)
+	mux.HandleFunc("/api/guilds/features", updateGuildFeaturesHandler)
+	mux.HandleFunc("/api/guilds/features/add", addGuildFeatureHandler)
+	mux.HandleFunc("/api/guilds/features/chip", guildFeatureChipHandler)
+	mux.HandleFunc("/api/guilds/features/remove", removeGuildFeatureHandler)
 	mux.HandleFunc("/", pageHandler)
 }
 
@@ -234,6 +236,10 @@ func pageHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		layout := createLayout(r, page, query)
+		if page.ID == "guilds" && layout.GuildLoadFailed {
+			guildRequestError(w, r, "unable to load guilds; try again", http.StatusBadGateway)
+			return
+		}
 
 		var data any
 
@@ -245,9 +251,7 @@ func pageHandler(w http.ResponseWriter, r *http.Request) {
 			}
 
 		case "guilds":
-			data = GuildsData{
-				LayoutData: layout,
-			}
+			data = guildsPageData(layout)
 
 		case "settings":
 			data = SettingsData{
@@ -438,6 +442,15 @@ func createLayout(r *http.Request, page Page, query string) LayoutData {
 	session := getSession(r)
 	if session == nil {
 		return layout
+	}
+
+	if page.ID == "guilds" || page.ID == "rss" || page.ID == "anime" {
+		var err error
+		layout.Guilds, err = getGuilds(session.AccessToken)
+		if err != nil {
+			slog.Error("failed to get guilds", "error", err)
+			layout.GuildLoadFailed = true
+		}
 	}
 
 	if session.CachedUserData == nil {
