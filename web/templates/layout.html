@@ -1,6 +1,7 @@
 {{ define "layout" }}
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -27,7 +28,53 @@
             {{ template "content" . }}
         </main>
     </div>
+
+    <script>
+        function updateUptime() {
+            const element = document.getElementById("uptime");
+
+            if (!element) {
+                return;
+            }
+
+            const online = element.dataset.online === "true";
+
+            if (!online) {
+                element.textContent = "00:00:00:00";
+                return;
+            }
+
+            const connectedAt = Number(element.dataset.connectedAt);
+
+            if (!connectedAt) {
+                element.textContent = "00:00:00:00";
+                return;
+            }
+
+            const elapsed = Math.max(
+                0,
+                Math.floor(Date.now() / 1000) - connectedAt
+            );
+
+            const days = Math.floor(elapsed / 86400);
+            const hours = Math.floor((elapsed % 86400) / 3600);
+            const minutes = Math.floor((elapsed % 3600) / 60);
+            const seconds = elapsed % 60;
+
+            element.textContent =
+                String(days).padStart(2, "0") + ":" +
+                String(hours).padStart(2, "0") + ":" +
+                String(minutes).padStart(2, "0") + ":" +
+                String(seconds).padStart(2, "0");
+        }
+
+        updateUptime();
+        setInterval(updateUptime, 1000);
+
+        document.body.addEventListener("htmx:afterSwap", updateUptime);
+    </script>
 </body>
+
 </html>
 {{ end }}
 
@@ -35,11 +82,7 @@
 <div class="server-select">
     <div class="server-select-current">
         {{ if .SelectedGuild.Icon }}
-        <img
-            class="server-select-icon"
-            src="{{ .SelectedGuild.Icon }}"
-            alt=""
-        >
+        <img class="server-select-icon" src="{{ .SelectedGuild.Icon }}" alt="">
         {{ else }}
         <div class="server-select-icon server-select-icon-placeholder">
             {{ printf "%.1s" .SelectedGuild.Name }}
@@ -51,10 +94,7 @@
 
     <select name="guild" class="server-select-dropdown">
         {{ range .Guilds }}
-        <option
-            value="{{ .ID }}"
-            {{ if eq .ID $.SelectedGuild.ID }}selected{{ end }}
-        >
+        <option value="{{ .ID }}" {{ if eq .ID $.SelectedGuild.ID }}selected{{ end }}>
             {{ .Name }}
         </option>
         {{ end }}
@@ -64,12 +104,7 @@
 
 {{ define "search" }}
 <form class="search" method="get">
-    <input
-        type="search"
-        name="q"
-        value="{{ .SearchQuery }}"
-        placeholder="Search..."
-    >
+    <input type="search" name="q" value="{{ .SearchQuery }}" placeholder="Search...">
     <button class="button button-primary" type="submit">
         Search
     </button>
