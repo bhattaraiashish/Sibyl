@@ -330,6 +330,11 @@ func createSession(w http.ResponseWriter, token DiscordTokenResponse) *UserSessi
 		ExpiresAt:    now.Add(time.Duration(token.ExpiresIn) * time.Second),
 	}
 
+	if err := InsertSession(session); err != nil {
+		slog.Error("failed to insert session", "error", err)
+		return nil
+	}
+
 	_SessionCache.Lock()
 	_SessionCache.data[session.ID] = session
 	_SessionCache.Unlock()
@@ -357,7 +362,16 @@ func getSession(r *http.Request) *UserSession {
 	_SessionCache.RUnlock()
 
 	if !ok {
-		return nil
+		sessionPtr := FindSession(cookie.Value)
+		if sessionPtr == nil {
+			return nil
+		}
+
+		session = *sessionPtr
+
+		_SessionCache.Lock()
+		_SessionCache.data[session.ID] = session
+		_SessionCache.Unlock()
 	}
 
 	now := time.Now()
@@ -365,9 +379,7 @@ func getSession(r *http.Request) *UserSession {
 	if now.Add(time.Minute).After(session.ExpiresAt) {
 		token := refreshDiscordToken(session.RefreshToken)
 		if token == nil {
-			_SessionCache.Lock()
-			delete(_SessionCache.data, session.ID)
-			_SessionCache.Unlock()
+			removeSession(session.ID)
 			return nil
 		}
 
@@ -381,15 +393,35 @@ func getSession(r *http.Request) *UserSession {
 			time.Duration(token.ExpiresIn) * time.Second,
 		)
 
-		_SessionCache.Lock()
-		_SessionCache.data[session.ID] = session
-		_SessionCache.Unlock()
+		if err := updateSession(session); err != nil {
+			slog.Error("failed to update session", "error", err)
+			return nil
+		}
 	}
 
 	return &session
 }
 
+func updateSession(session UserSession) error {
+	if err := UpdateSession(session); err != nil {
+		_SessionCache.Lock()
+		delete(_SessionCache.data, session.ID)
+		_SessionCache.Unlock()
+		return err
+	}
+
+	_SessionCache.Lock()
+	_SessionCache.data[session.ID] = session
+	_SessionCache.Unlock()
+
+	return nil
+}
+
 func removeSession(sessionID string) {
+	if err := DeleteSession(sessionID); err != nil {
+		slog.Error("failed to delete session", "error", err)
+	}
+
 	_SessionCache.Lock()
 	delete(_SessionCache.data, sessionID)
 	_SessionCache.Unlock()

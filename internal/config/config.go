@@ -125,6 +125,14 @@ func initDatabase(db *sql.DB) error {
 			last_seen INTEGER NOT NULL DEFAULT 0,
 			latency INTEGER NOT NULL DEFAULT 0
 		);
+
+		CREATE TABLE IF NOT EXISTS user_sessions (
+			id TEXT PRIMARY KEY,
+			access_token TEXT NOT NULL,
+			refresh_token TEXT NOT NULL,
+			expires_at INTEGER NOT NULL,
+			created_at INTEGER NOT NULL
+		);
 	`)
 
 	if version != LatestDatabaseVersion {
