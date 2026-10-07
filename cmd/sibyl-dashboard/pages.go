@@ -12,11 +12,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"text/template"
 	"time"
 
 	"github.com/bhattaraiashish/Sibyl/internal/config"
+	"github.com/bhattaraiashish/Sibyl/internal/syncmap"
 	"github.com/google/uuid"
 )
 
@@ -30,13 +30,11 @@ type UserSession struct {
 }
 
 type SessionCache struct {
-	sync.RWMutex
-	data map[string]UserSession
+	syncmap.Map[string, UserSession]
 }
 
 type FlashCache struct {
-	sync.RWMutex
-	data map[string]FlashData
+	syncmap.Map[string, FlashData]
 }
 
 type DiscordTokenResponse struct {
@@ -48,13 +46,14 @@ type DiscordTokenResponse struct {
 }
 
 var (
-	_Pages        []Page
-	_Templates    map[string]*template.Template
+	_Pages     []Page
+	_Templates map[string]*template.Template
+
 	_SessionCache = SessionCache{
-		data: make(map[string]UserSession),
+		Map: syncmap.NewMap[string, UserSession](),
 	}
 	_FlashCache = FlashCache{
-		data: make(map[string]FlashData),
+		Map: syncmap.NewMap[string, FlashData](),
 	}
 	_LogPath = ""
 )
@@ -460,9 +459,7 @@ func createSession(w http.ResponseWriter, token DiscordTokenResponse) *UserSessi
 		return nil
 	}
 
-	_SessionCache.Lock()
-	_SessionCache.data[session.ID] = session
-	_SessionCache.Unlock()
+	_SessionCache.Set(session.ID, session)
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     _SessionCookieName,
@@ -482,9 +479,7 @@ func getSession(r *http.Request) *UserSession {
 		return nil
 	}
 
-	_SessionCache.RLock()
-	session, ok := _SessionCache.data[cookie.Value]
-	_SessionCache.RUnlock()
+	session, ok := _SessionCache.Get(cookie.Value)
 
 	if !ok {
 		sessionPtr := FindSession(cookie.Value)
@@ -494,9 +489,7 @@ func getSession(r *http.Request) *UserSession {
 
 		session = *sessionPtr
 
-		_SessionCache.Lock()
-		_SessionCache.data[session.ID] = session
-		_SessionCache.Unlock()
+		_SessionCache.Set(session.ID, session)
 	}
 
 	now := time.Now()
@@ -529,16 +522,10 @@ func getSession(r *http.Request) *UserSession {
 
 func updateSession(session UserSession) error {
 	if err := UpdateSession(session); err != nil {
-		_SessionCache.Lock()
-		delete(_SessionCache.data, session.ID)
-		_SessionCache.Unlock()
+		_SessionCache.Delete(session.ID)
 		return err
 	}
-
-	_SessionCache.Lock()
-	_SessionCache.data[session.ID] = session
-	_SessionCache.Unlock()
-
+	_SessionCache.Set(session.ID, session)
 	return nil
 }
 
@@ -546,11 +533,7 @@ func removeSession(sessionID string) {
 	if err := DeleteSession(sessionID); err != nil {
 		slog.Error("failed to delete session", "error", err)
 	}
-
-	_SessionCache.Lock()
-	delete(_SessionCache.data, sessionID)
-	_SessionCache.Unlock()
-
+	_SessionCache.Delete(sessionID)
 	removeFlashMessage(sessionID)
 }
 
@@ -568,10 +551,7 @@ func getCachedSessionUser(session *UserSession) *UserData {
 		}
 
 		session._CachedUserData = user
-
-		_SessionCache.Lock()
-		_SessionCache.data[session.ID] = *session
-		_SessionCache.Unlock()
+		_SessionCache.Set(session.ID, *session)
 	}
 
 	return session._CachedUserData
@@ -599,20 +579,15 @@ func createLayout(session *UserSession, page Page, query string) LayoutData {
 // Flash Message
 
 func createFlashMessage(sessionID string, flash FlashData) {
-	_FlashCache.Lock()
-	_FlashCache.data[sessionID] = flash
-	_FlashCache.Unlock()
+	_FlashCache.Set(sessionID, flash)
 }
 
 func getFlashMessage(sessionID string) *FlashData {
-	_FlashCache.Lock()
-	flash, ok := _FlashCache.data[sessionID]
+	flash, ok := _FlashCache.Get(sessionID)
 
 	if ok {
-		delete(_FlashCache.data, sessionID)
+		_FlashCache.Delete((sessionID))
 	}
-
-	_FlashCache.Unlock()
 
 	if !ok {
 		return nil
@@ -622,9 +597,7 @@ func getFlashMessage(sessionID string) *FlashData {
 }
 
 func removeFlashMessage(sessionID string) {
-	_FlashCache.Lock()
-	delete(_FlashCache.data, sessionID)
-	_FlashCache.Unlock()
+	_FlashCache.Delete(sessionID)
 }
 
 //------------------------------------
