@@ -512,6 +512,10 @@ func removeSession(sessionID string) {
 }
 
 func getCachedSessionUser(session *UserSession) *UserData {
+	if session == nil {
+		return nil
+	}
+
 	now := time.Now()
 
 	if session._CachedUserData == nil || now.After(session.ExpiresAt) {
