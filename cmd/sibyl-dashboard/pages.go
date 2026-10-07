@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -54,6 +56,7 @@ var (
 	_FlashCache = FlashCache{
 		data: make(map[string]FlashData),
 	}
+	_LogPath = ""
 )
 
 const (
@@ -64,6 +67,12 @@ const (
 
 func InitPages() {
 	_Templates = make(map[string]*template.Template)
+
+	_LogPath = os.Getenv("LOG_PATH")
+
+	if _LogPath == "" {
+		panic("Please provide LOG_PATH in env.json")
+	}
 
 	files, err := filepath.Glob("web/templates/pages/*.html")
 	if err != nil {
@@ -118,6 +127,8 @@ func RegisterHandlers(mux *http.ServeMux) {
 		"/static/",
 		http.FileServer(http.Dir("web/static")),
 	))
+
+	mux.Handle("/logs/view/", http.StripPrefix("/logs/view", http.HandlerFunc(logHandler)))
 
 	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/static/favicon.ico")
@@ -277,6 +288,19 @@ func pageHandler(w http.ResponseWriter, r *http.Request) {
 				},
 			}
 
+		case "logs":
+			files, err := filepath.Glob(filepath.Join(_LogPath, "*.log*"))
+			if err != nil {
+				files = make([]string, 0)
+			}
+
+			logs := make([]Log, 0, len(files))
+			for _, path := range files {
+				name := filepath.Base(path)
+				logs = append(logs, Log{Name: name, Path: filepath.Join("/logs/view", name)})
+			}
+			data = LogsData{LayoutData: layout, Logs: logs}
+
 		default:
 			data = layout
 		}
@@ -308,6 +332,25 @@ func overviewHandler(w http.ResponseWriter, r *http.Request) {
 	); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func logHandler(w http.ResponseWriter, r *http.Request) {
+
+	fileName := r.URL.Path[1:]
+	filePath := filepath.Join(_LogPath, fileName)
+	file, err := os.Open(filePath)
+	defer file.Close()
+	if err != nil {
+		render404(w, r)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
+
+	_, err = io.Copy(w, file)
 }
 
 func updateSettingsPostHandler(w http.ResponseWriter, r *http.Request) {

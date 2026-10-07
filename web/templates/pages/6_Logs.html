@@ -18,38 +18,17 @@
 
 <section class="editable-table logs-table">
     <div class="editable-table-header">
-        <div>Log file</div>
-        <div></div>
-        <div></div>
+        Log file
     </div>
 
-    <div class="editable-row">
-        <div class="editable-cell">
-            <a class="log-file" href="/logs/sibyl-2026-10-06.log" download>
-                sibyl-2026-10-06.log
+    {{range .Logs}}
+        <div class="editable-row editable-cell">
+            <a class="log-file" href="{{.Path}}" target="_blank">
+                {{.Name}}
             </a>
         </div>
+    {{end}}
 
-        <div class="editable-cell"></div>
-
-        <div class="editable-actions">
-            <button class="editable-remove" type="button">×</button>
-        </div>
-    </div>
-
-    <div class="editable-row">
-        <div class="editable-cell">
-            <a class="log-file" href="/logs/sibyl-2026-10-05.log" download>
-                sibyl-2026-10-05.log
-            </a>
-        </div>
-
-        <div class="editable-cell"></div>
-
-        <div class="editable-actions">
-            <button class="editable-remove" type="button">×</button>
-        </div>
-    </div>
 </section>
 
 {{ template "flash_box" . }}

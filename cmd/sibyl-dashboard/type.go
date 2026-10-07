@@ -74,6 +74,16 @@ type SettingsData struct {
 	Config ConfigData
 }
 
+type Log struct {
+	Name string
+	Path string
+}
+
+type LogsData struct {
+	LayoutData
+	Logs []Log
+}
+
 type ErrorData struct {
 	Title    string
 	Message  string
