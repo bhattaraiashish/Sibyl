@@ -468,6 +468,56 @@ input[type="number"] {
     appearance: textfield;
 }
 
+/* Flash Message */
+
+.flash {
+    position: fixed;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+
+    z-index: 1000;
+
+    padding: 12px 16px;
+    border-radius: 6px;
+
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+
+    font-size: 14px;
+
+    animation: flash-in 0.2s ease-out;
+}
+
+.flash-success {
+    background: #315f4a;
+    color: #fff;
+}
+
+.flash-error {
+    background: #713d3d;
+    color: #fff;
+}
+
+.flash.hidden {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+    transition:
+        opacity 0.3s ease,
+        transform 0.3s ease;
+}
+
+@keyframes flash-in {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+}
+
 /* Passwords */
 
 .password-input {

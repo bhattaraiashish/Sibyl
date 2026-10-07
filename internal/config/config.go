@@ -114,7 +114,7 @@ func LoadConfig(db *sql.DB) SibylConfig {
 	return cfg
 }
 
-func SaveConfig(db *sql.DB, config SibylConfig) {
+func SaveConfig(db *sql.DB, config SibylConfig) bool {
 	_, err := db.Exec(`
 		INSERT INTO config (key, value)
 		VALUES ('notification_interval', ?)
@@ -124,10 +124,12 @@ func SaveConfig(db *sql.DB, config SibylConfig) {
 		config.NotificationInterval.String(),
 	)
 	if err != nil {
-		slog.Error("failed to load config",
+		slog.Error("failed to save config",
 			slog.Any("error", err),
 		)
+		return false
 	}
+	return true
 }
 
 func initDatabase(db *sql.DB) error {

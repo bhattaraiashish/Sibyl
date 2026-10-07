@@ -28,14 +28,19 @@
             </div>
 
             <div class="editable-cell">
+                {{ if .Config.CanEdit }}
                 <input type="number" name="notification_interval" value="{{ .Config.NotificationIntervalMins }}"
                     data-original-value="{{ .Config.NotificationIntervalMins }}" min="1" step="1">
+                {{ else }}
+                <span>{{ .Config.NotificationIntervalMins }}</span>
+                {{ end }}
             </div>
 
             <div class="editable-actions"></div>
         </div>
     </div>
 
+    {{ if .Config.CanEdit }}
     <div class="page-actions">
         <button id="discard-changes" class="button" type="button" disabled>
             Discard
@@ -45,8 +50,11 @@
             Save changes
         </button>
     </div>
+    {{ end }}
 
 </form>
+
+{{ template "flash_box" . }}
 
 <script>
     const form = document.getElementById("settings-form");

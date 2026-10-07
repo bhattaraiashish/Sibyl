@@ -10,6 +10,7 @@ import (
 	"github.com/bhattaraiashish/Sibyl/internal/config"
 	"github.com/disgoorg/disgo"
 	"github.com/disgoorg/disgo/bot"
+	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/snowflake/v2"
 	_ "modernc.org/sqlite"
 )
@@ -216,10 +217,39 @@ func GetDiscordUser(accessToken string) *UserData {
 		avatarURL = &defaultAvatar
 	}
 
+	now := time.Now()
+	expiresAt := now.Add(time.Hour)
+
 	return &UserData{
-		ID:          user.ID.String(),
+		ID:          user.ID,
 		DisplayName: displayName,
 		Username:    user.Username,
 		AvatarURL:   *avatarURL,
+		ExpiresAt:   expiresAt,
+		IsDeveloper: IsBotDeveloper(user.ID),
 	}
+}
+
+func IsBotDeveloper(userID snowflake.ID) bool {
+	app, err := _Client.Rest.GetCurrentApplication()
+	if err != nil {
+		slog.Error("failed to get Discord application", "error", err)
+		return false
+	}
+
+	if app.Owner != nil && app.Owner.ID == userID {
+		return true
+	}
+
+	if app.Team != nil {
+		for _, member := range app.Team.Members {
+			if member.User.ID == userID {
+				developer := member.Role == discord.TeamRoleDeveloper ||
+					member.Role == discord.TeamRoleAdmin
+				return developer
+			}
+		}
+	}
+
+	return false
 }

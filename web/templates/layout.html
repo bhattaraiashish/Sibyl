@@ -72,6 +72,17 @@
         setInterval(updateUptime, 1000);
 
         document.body.addEventListener("htmx:afterSwap", updateUptime);
+
+        const flash = document.getElementById("flash");
+
+        if (flash) {
+            setTimeout(() => {
+                flash.classList.add("hidden");
+                setTimeout(() => {
+                    flash.remove();
+                }, 300);
+            }, 3000);
+        }
     </script>
 </body>
 
@@ -133,6 +144,14 @@
         <div class="user-username">@anonymous</div>
         <a class="user-action" href="/discord/auth?page={{ .Page }}">Login</a>
     </div>
+</div>
+{{ end }}
+{{ end }}
+
+{{ define "flash_box" }}
+{{ if .Flash }}
+<div id="flash" class="flash flash-{{ .Flash.Type }}">
+    {{ .Flash.Message }}
 </div>
 {{ end }}
 {{ end }}

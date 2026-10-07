@@ -1,5 +1,11 @@
 package main
 
+import (
+	"time"
+
+	"github.com/disgoorg/snowflake/v2"
+)
+
 type Page struct {
 	ID    string
 	Path  string
@@ -13,10 +19,17 @@ type Guild struct {
 }
 
 type UserData struct {
-	ID          string
+	ID          snowflake.ID
 	DisplayName string
 	Username    string
 	AvatarURL   string
+	ExpiresAt   time.Time
+	IsDeveloper bool
+}
+
+type FlashData struct {
+	Type    string
+	Message string
 }
 
 type LayoutData struct {
@@ -27,6 +40,7 @@ type LayoutData struct {
 	Guilds        []Guild
 	SelectedGuild Guild
 	User          *UserData
+	Flash         *FlashData
 }
 
 type DashboardData struct {
@@ -52,6 +66,7 @@ type GuildsData struct {
 
 type ConfigData struct {
 	NotificationIntervalMins int
+	CanEdit                  bool
 }
 
 type SettingsData struct {

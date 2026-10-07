@@ -19,17 +19,22 @@ import (
 )
 
 type UserSession struct {
-	ID             string
-	AccessToken    string
-	RefreshToken   string
-	ExpiresAt      time.Time
-	CreatedAt      time.Time
-	CachedUserData *UserData
+	ID              string
+	AccessToken     string
+	RefreshToken    string
+	ExpiresAt       time.Time
+	CreatedAt       time.Time
+	_CachedUserData *UserData
 }
 
 type SessionCache struct {
 	sync.RWMutex
 	data map[string]UserSession
+}
+
+type FlashCache struct {
+	sync.RWMutex
+	data map[string]FlashData
 }
 
 type DiscordTokenResponse struct {
@@ -45,6 +50,9 @@ var (
 	_Templates    map[string]*template.Template
 	_SessionCache = SessionCache{
 		data: make(map[string]UserSession),
+	}
+	_FlashCache = FlashCache{
+		data: make(map[string]FlashData),
 	}
 )
 
@@ -230,13 +238,20 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 
 func pageHandler(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("q")
+	session := getSession(r)
+
+	canEdit := false
+	if session != nil {
+		user := getCachedSessionUser(session)
+		canEdit = user.IsDeveloper
+	}
 
 	for _, page := range _Pages {
 		if r.URL.Path != page.Path {
 			continue
 		}
 
-		layout := createLayout(r, page, query)
+		layout := createLayout(session, page, query)
 
 		var data any
 
@@ -258,6 +273,7 @@ func pageHandler(w http.ResponseWriter, r *http.Request) {
 				LayoutData: layout,
 				Config: ConfigData{
 					NotificationIntervalMins: int(cfg.NotificationInterval.Minutes()),
+					CanEdit:                  canEdit,
 				},
 			}
 
@@ -281,7 +297,7 @@ func overviewHandler(w http.ResponseWriter, r *http.Request) {
 		Path:  r.URL.Path,
 	}
 	data := OverviewData{
-		LayoutData: createLayout(r, page, ""),
+		LayoutData: createLayout(getSession(r), page, ""),
 		Dashboard:  GetDashboardData(),
 	}
 
@@ -300,18 +316,56 @@ func updateSettingsPostHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	session := getSession(r)
+	hasPermission := false
+	if session != nil {
+		if user := getCachedSessionUser(session); user != nil {
+			if user.IsDeveloper {
+				// Don't depend on cached value
+				hasPermission = IsBotDeveloper(user.ID)
+			}
+		}
+	}
+
+	if !hasPermission {
+		if session != nil {
+			createFlashMessage(session.ID, FlashData{
+				Type:    "error",
+				Message: "No permission.",
+			})
+		}
+
+		http.Redirect(w, r, "/settings", http.StatusSeeOther)
+		return
+	}
+
 	notificationInterval, err := strconv.Atoi(
 		r.FormValue("notification_interval"),
 	)
 	if err != nil || notificationInterval < 1 {
-		slog.Error("invalid notification_interval", "error", err)
-		notificationInterval = 1
+		createFlashMessage(session.ID, FlashData{
+			Type:    "error",
+			Message: "Invalid notification interval.",
+		})
+
+		http.Redirect(w, r, "/settings", http.StatusSeeOther)
+		return
 	}
 
 	cfg := config.SibylConfig{
 		NotificationInterval: time.Duration(max(1, notificationInterval)) * time.Minute,
 	}
-	config.SaveConfig(_Database, cfg)
+	if config.SaveConfig(_Database, cfg) {
+		createFlashMessage(session.ID, FlashData{
+			Type:    "success",
+			Message: "Settings saved.",
+		})
+	} else {
+		createFlashMessage(session.ID, FlashData{
+			Type:    "error",
+			Message: "Failed to write to database.",
+		})
+	}
 
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
@@ -323,7 +377,7 @@ func render404(w http.ResponseWriter, r *http.Request) {
 		Title: "Not Found",
 		Path:  r.URL.Path,
 	}
-	data := createLayout(r, page, "")
+	data := createLayout(getSession(r), page, "")
 
 	if err := _Templates["404"].ExecuteTemplate(w, "layout", data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -453,37 +507,77 @@ func removeSession(sessionID string) {
 	_SessionCache.Lock()
 	delete(_SessionCache.data, sessionID)
 	_SessionCache.Unlock()
+
+	removeFlashMessage(sessionID)
 }
 
-func createLayout(r *http.Request, page Page, query string) LayoutData {
-	layout := LayoutData{
-		Title:       page.Title,
-		Page:        page.Path,
-		Pages:       _Pages,
-		SearchQuery: query,
-	}
+func getCachedSessionUser(session *UserSession) *UserData {
+	now := time.Now()
 
-	session := getSession(r)
-	if session == nil {
-		return layout
-	}
-
-	if session.CachedUserData == nil {
+	if session._CachedUserData == nil || now.After(session.ExpiresAt) {
 		user := GetDiscordUser(session.AccessToken)
 		if user == nil {
-			return layout
+			return nil
 		}
 
-		session.CachedUserData = user
+		session._CachedUserData = user
 
 		_SessionCache.Lock()
 		_SessionCache.data[session.ID] = *session
 		_SessionCache.Unlock()
 	}
 
-	layout.User = session.CachedUserData
+	return session._CachedUserData
+}
 
+func createLayout(session *UserSession, page Page, query string) LayoutData {
+	var flash *FlashData
+
+	if session != nil {
+		flash = getFlashMessage(session.ID)
+	}
+
+	layout := LayoutData{
+		Title:       page.Title,
+		Page:        page.Path,
+		Pages:       _Pages,
+		SearchQuery: query,
+		User:        getCachedSessionUser(session),
+		Flash:       flash,
+	}
 	return layout
+}
+
+//------------------------------------
+// Flash Message
+
+func createFlashMessage(sessionID string, flash FlashData) {
+	_FlashCache.Lock()
+	_FlashCache.data[sessionID] = flash
+	_FlashCache.Unlock()
+}
+
+func getFlashMessage(sessionID string) *FlashData {
+	_FlashCache.Lock()
+	flash, ok := _FlashCache.data[sessionID]
+
+	if ok {
+		delete(_FlashCache.data, sessionID)
+	}
+
+	_FlashCache.Unlock()
+
+	if !ok {
+		return nil
+	}
+
+	return &flash
+}
+
+func removeFlashMessage(sessionID string) {
+	_FlashCache.Lock()
+	delete(_FlashCache.data, sessionID)
+	_FlashCache.Unlock()
 }
 
 //------------------------------------
