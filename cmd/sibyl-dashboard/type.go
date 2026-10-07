@@ -1,9 +1,5 @@
 package main
 
-import (
-	"github.com/bhattaraiashish/Sibyl/internal/config"
-)
-
 type Page struct {
 	ID    string
 	Path  string
@@ -54,9 +50,13 @@ type GuildsData struct {
 	LayoutData
 }
 
+type ConfigData struct {
+	NotificationIntervalMins int
+}
+
 type SettingsData struct {
 	LayoutData
-	Config config.SibylConfig
+	Config ConfigData
 }
 
 type ErrorData struct {

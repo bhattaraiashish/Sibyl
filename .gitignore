@@ -6,3 +6,4 @@ config.json
 *.db-shm
 *.db-wal
 env.json
+.air.toml

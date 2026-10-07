@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"text/template"
@@ -118,6 +119,7 @@ func RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("/discord/callback", discordLoginCallbackHandler)
 	mux.HandleFunc("/logout", logoutHandler)
 
+	mux.HandleFunc("/update/settings", updateSettingsPostHandler)
 	mux.HandleFunc("/api/overview", overviewHandler)
 	mux.HandleFunc("/", pageHandler)
 }
@@ -251,9 +253,12 @@ func pageHandler(w http.ResponseWriter, r *http.Request) {
 			}
 
 		case "settings":
+			cfg := config.LoadConfig(_Database)
 			data = SettingsData{
 				LayoutData: layout,
-				Config:     config.LoadConfig(_Database),
+				Config: ConfigData{
+					NotificationIntervalMins: int(cfg.NotificationInterval.Minutes()),
+				},
 			}
 
 		default:
@@ -287,6 +292,28 @@ func overviewHandler(w http.ResponseWriter, r *http.Request) {
 	); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func updateSettingsPostHandler(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	notificationInterval, err := strconv.Atoi(
+		r.FormValue("notification_interval"),
+	)
+	if err != nil || notificationInterval < 1 {
+		slog.Error("invalid notification_interval", "error", err)
+		notificationInterval = 1
+	}
+
+	cfg := config.SibylConfig{
+		NotificationInterval: time.Duration(max(1, notificationInterval)) * time.Minute,
+	}
+	config.SaveConfig(_Database, cfg)
+
+	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
 func render404(w http.ResponseWriter, r *http.Request) {

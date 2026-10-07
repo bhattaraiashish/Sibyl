@@ -13,35 +13,78 @@
     </div>
 </div>
 
-<div class="editable-table">
-    <div class="editable-table-header">
-        <div>Setting</div>
-        <div>Value</div>
-        <div></div>
-    </div>
+<form method="POST" action="/update/settings" id="settings-form">
 
-    <div class="editable-row">
-        <div class="editable-cell">
-            Notification interval
+    <div class="editable-table">
+        <div class="editable-table-header">
+            <div>Setting</div>
+            <div>Value</div>
+            <div></div>
         </div>
 
-        <div class="editable-cell">
-            <input type="text" name="notification_interval" value="{{ .Config.NotificationInterval }}">
-        </div>
+        <div class="editable-row">
+            <div class="editable-cell">
+                Notification Interval (mins)
+            </div>
 
-        <div class="editable-actions"></div>
+            <div class="editable-cell">
+                <input type="number" name="notification_interval" value="{{ .Config.NotificationIntervalMins }}"
+                    data-original-value="{{ .Config.NotificationIntervalMins }}" min="1" step="1">
+            </div>
+
+            <div class="editable-actions"></div>
+        </div>
     </div>
 
-</div>
+    <div class="page-actions">
+        <button id="discard-changes" class="button" type="button" disabled>
+            Discard
+        </button>
 
-<div class="page-actions">
-    <button class="button" type="button" disabled>
-        Discard
-    </button>
+        <button id="save-changes" class="button button-primary" type="submit" disabled>
+            Save changes
+        </button>
+    </div>
 
-    <button class="button button-primary" type="button" disabled>
-        Save changes
-    </button>
-</div>
+</form>
+
+<script>
+    const form = document.getElementById("settings-form");
+    const inputs = form.querySelectorAll("input");
+    const discardButton = document.getElementById("discard-changes");
+    const saveButton = document.getElementById("save-changes");
+
+    function updateEditState() {
+        let hasChanges = false;
+
+        inputs.forEach(input => {
+            const row = input.closest(".editable-row");
+            const edited = input.value !== input.dataset.originalValue;
+
+            row.classList.toggle("edited", edited);
+
+            if (edited) {
+                hasChanges = true;
+            }
+        });
+
+        discardButton.disabled = !hasChanges;
+        saveButton.disabled = !hasChanges;
+    }
+
+    inputs.forEach(input => {
+        input.addEventListener("input", updateEditState);
+    });
+
+    discardButton.addEventListener("click", () => {
+        inputs.forEach(input => {
+            input.value = input.dataset.originalValue;
+        });
+
+        updateEditState();
+    });
+
+    updateEditState();
+</script>
 
 {{ end }}

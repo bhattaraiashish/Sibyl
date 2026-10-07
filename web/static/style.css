@@ -413,6 +413,14 @@ body {
     border-color: #666;
 }
 
+.editable-row {
+    transition: background-color 0.15s ease;
+}
+
+.editable-row.edited {
+    background: rgba(80, 140, 220, 0.20);
+}
+
 .editable-actions {
     display: flex;
     align-items: center;
@@ -448,6 +456,16 @@ body {
 .editable-add:hover {
     background: #202020;
     color: #fff;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+input[type="number"] {
+    appearance: textfield;
 }
 
 /* Passwords */

@@ -89,8 +89,8 @@ func LoadConfig(db *sql.DB) SibylConfig {
 	err := db.QueryRow(`
 		SELECT value
 		FROM config
-		WHERE key = ?
-	`, "notification_interval").Scan(&value)
+		WHERE key = 'notification_interval'
+	`).Scan(&value)
 
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
@@ -112,6 +112,22 @@ func LoadConfig(db *sql.DB) SibylConfig {
 	cfg.NotificationInterval = interval
 
 	return cfg
+}
+
+func SaveConfig(db *sql.DB, config SibylConfig) {
+	_, err := db.Exec(`
+		INSERT INTO config (key, value)
+		VALUES ('notification_interval', ?)
+		ON CONFLICT(key) DO UPDATE SET
+			value = excluded.value;
+	`,
+		config.NotificationInterval.String(),
+	)
+	if err != nil {
+		slog.Error("failed to load config",
+			slog.Any("error", err),
+		)
+	}
 }
 
 func initDatabase(db *sql.DB) error {
