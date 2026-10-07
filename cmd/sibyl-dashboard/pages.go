@@ -13,6 +13,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/bhattaraiashish/Sibyl/internal/config"
 	"github.com/google/uuid"
 )
 
@@ -252,7 +253,7 @@ func pageHandler(w http.ResponseWriter, r *http.Request) {
 		case "settings":
 			data = SettingsData{
 				LayoutData: layout,
-				Config:     LoadOrCreateDefaultConfig(),
+				Config:     config.LoadConfig(_Database),
 			}
 
 		default:

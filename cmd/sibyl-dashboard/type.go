@@ -56,7 +56,7 @@ type GuildsData struct {
 
 type SettingsData struct {
 	LayoutData
-	Config config.SibylConfigFile
+	Config config.SibylConfig
 }
 
 type ErrorData struct {

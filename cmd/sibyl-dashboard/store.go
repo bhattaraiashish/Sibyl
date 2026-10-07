@@ -35,10 +35,10 @@ type DatabaseCounts struct {
 	RSSFeeds  int
 }
 
-func InitStore(token string) {
+func InitStore(token, dbPath string) {
 	var err error
 
-	_Database = config.LoadDatabase()
+	_Database = config.LoadDatabase(dbPath)
 
 	_Client, err = disgo.New(token)
 	if err != nil {

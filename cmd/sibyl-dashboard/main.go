@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -15,8 +16,12 @@ import (
 )
 
 func main() {
-	config.LoadEnvFile()
-	InitStore(os.Getenv("DISCORD_BOT_TOKEN"))
+	env := flag.String("env", "env.json", "Environment JSON")
+	db := flag.String("db", "sibyl.db", "Database Path")
+	flag.Parse()
+
+	config.LoadEnvFile(*env)
+	InitStore(os.Getenv("DISCORD_BOT_TOKEN"), *db)
 
 	InitPages()
 	StartDashboardUpdater()

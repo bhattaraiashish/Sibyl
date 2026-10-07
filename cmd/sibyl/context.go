@@ -463,10 +463,11 @@ func (ctx *BotContext) StartTimers() {
 	}
 }
 
-func (ctx *BotContext) Login(token string) error {
+func (ctx *BotContext) Login(token, dbPath string) error {
 	slog.Info("debug mode", slog.Bool("is_debug", ctx.IsDebug))
 
-	db := config.LoadDatabase()
+	db := config.LoadDatabase(dbPath)
+	go watchConfig(db)
 
 	ctx.DB = db
 
@@ -1016,5 +1017,39 @@ func updateLastSeen(db *sql.DB, client *bot.Client) {
 
 	if err != nil {
 		slog.Error("failed to update bot status", "error", err)
+	}
+}
+
+func configChanged(a, b config.SibylConfig) bool {
+	return a.NotificationInterval != b.NotificationInterval
+}
+
+func watchConfig(db *sql.DB) {
+	current := config.LoadConfig(db)
+
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		newConfig := config.LoadConfig(db)
+
+		if !configChanged(current, newConfig) {
+			continue
+		}
+
+		if current.NotificationInterval != newConfig.NotificationInterval {
+			slog.Info(
+				"notification interval changed",
+				slog.Duration(
+					"notification_interval",
+					newConfig.NotificationInterval,
+				),
+			)
+
+			SetAnimeCheckInterval(newConfig.NotificationInterval)
+			SetRSSCheckInterval(newConfig.NotificationInterval)
+		}
+
+		current = newConfig
 	}
 }

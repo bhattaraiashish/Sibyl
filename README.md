@@ -33,12 +33,40 @@ go run ./cmd/sibyl
 go run ./cmd/sibyl-dashboard
 ```
 
+### Deploy script
+
+The repository includes `deploy.sh`, which builds and starts both the bot and dashboard:
+
+```bash
+./deploy.sh
+```
+
+The script builds:
+
+```text
+sibyl
+sibyl-dashboard
+```
+
+and starts both processes.
+
 ## Configuration
 
-Sibyl uses two separate JSON files:
+Sibyl uses an `env.json` file for environment variables and secrets. Application configuration is stored in the SQLite database.
 
-* `config.json` — application settings
-* `env.json` — environment variables and secrets
+The default environment file is:
+
+```text
+env.json
+```
+
+The default database file is:
+
+```text
+sibyl.db
+```
+
+Both paths can be changed using command-line options.
 
 ### Environment file
 
@@ -65,17 +93,13 @@ Create an `env.json` file:
 
 `DISCORD_REDIRECT_URL` is the OAuth2 callback URL registered with Discord.
 
-### Configuration file
+### Database configuration
 
-Create `config.json`:
+Sibyl stores application configuration in its SQLite database.
 
-```json
-{
-    "notification_interval": "30m"
-}
-```
+The default configuration is created automatically when the database is initialized.
 
-### Options
+Currently available options include:
 
 `notification_interval`
 
@@ -92,14 +116,20 @@ It uses Go duration syntax:
 
 The default is `30m`.
 
-The configuration file is automatically monitored while the bot is running. When `config.json` changes, Sibyl reloads the configuration and applies the new notification interval without restarting the bot.
+Configuration can be changed through the web dashboard. The bot periodically checks the database and applies configuration changes without requiring a restart.
 
 ## Usage
 
-Start the bot with:
+Start the bot with the default environment file and database:
 
 ```bash
-./sibyl -config ./config.json
+./sibyl
+```
+
+Use custom files with:
+
+```bash
+./sibyl -env ./env.json -db ./sibyl.db
 ```
 
 In debug mode, all commands are registered per guild instead of globally. This allows command changes to take effect immediately during development.
@@ -107,20 +137,28 @@ In debug mode, all commands are registered per guild instead of globally. This a
 ### Command-line options
 
 ```text
--config <path>
-    Path to the configuration file.
+-env <path>
+
+    Path to the environment file.
+    Default: env.json
+
+-db <path>
+
+    Path to the SQLite database.
+    Default: sibyl.db
 
 -debug
+
     Enable debug mode. Commands are registered per guild.
 ```
 
 For example:
 
 ```bash
-./sibyl -config ./config.json -debug
+./sibyl -env ./production.json -db ./data/sibyl.db -debug
 ```
 
-The bot reads its environment variables from `env.json` and initializes its database and Discord connection automatically when started.
+The bot reads its environment variables from the specified environment file and initializes the SQLite database automatically when started.
 
 ## Dashboard
 
@@ -138,26 +176,57 @@ Run it with:
 ./sibyl-dashboard
 ```
 
-The dashboard port is configured using `SIBYL_PORT` in `env.json`.
-
 Or run it directly during development:
 
 ```bash
 go run ./cmd/sibyl-dashboard
 ```
 
-Discord OAuth2 login is configured using the Discord variables in `env.json`.
+The dashboard uses the same default files:
+
+```text
+env.json
+sibyl.db
+```
+
+Custom paths can be specified using the same `-env` and `-db` options:
+
+```bash
+./sibyl-dashboard -env ./env.json -db ./sibyl.db
+```
+
+The dashboard port is configured using `SIBYL_PORT` in the environment file.
+
+Discord OAuth2 login is configured using the Discord variables in the environment file.
 
 ## Running Both
 
-Run the bot and dashboard as separate processes:
+The bot and dashboard are separate processes and share the same SQLite database.
+
+The simplest way to start both is:
 
 ```bash
-./sibyl -config ./config.json
+./deploy.sh
+```
+
+Alternatively, start them separately:
+
+```bash
+./sibyl
 ```
 
 ```bash
 ./sibyl-dashboard
 ```
 
-The bot and dashboard share the same SQLite database, `config.json`, and `env.json`.
+When using a custom database, make sure both processes use the same database path:
+
+```bash
+./sibyl -db ./data/sibyl.db
+```
+
+```bash
+./sibyl-dashboard -db ./data/sibyl.db
+```
+
+The SQLite database contains application state and configuration, while the environment file contains environment-specific settings and secrets.

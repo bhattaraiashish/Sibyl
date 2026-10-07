@@ -21,12 +21,14 @@ type SibylConfig struct {
 	NotificationInterval time.Duration
 }
 
-type SibylConfigFile struct {
-	NotificationInterval string `json:"notification_interval"`
+func DefaultConfig() SibylConfig {
+	return SibylConfig{
+		NotificationInterval: 15 * time.Minute,
+	}
 }
 
-func LoadEnvFile() {
-	data, err := os.ReadFile("env.json")
+func LoadEnvFile(path string) {
+	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return
@@ -49,8 +51,8 @@ func LoadEnvFile() {
 	}
 }
 
-func LoadDatabase() *sql.DB {
-	db, err := sql.Open("sqlite", "sibyl.db")
+func LoadDatabase(path string) *sql.DB {
+	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		slog.Error("failed to open database", "error", err)
 		os.Exit(1)
@@ -77,6 +79,39 @@ func LoadDatabase() *sql.DB {
 	}
 
 	return db
+}
+
+func LoadConfig(db *sql.DB) SibylConfig {
+	cfg := DefaultConfig()
+
+	var value string
+
+	err := db.QueryRow(`
+		SELECT value
+		FROM config
+		WHERE key = ?
+	`, "notification_interval").Scan(&value)
+
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			slog.Error("failed to load config",
+				slog.Any("error", err),
+			)
+		}
+		return cfg
+	}
+
+	interval, err := time.ParseDuration(value)
+	if err != nil || interval <= time.Minute {
+		slog.Warn("invalid notification interval",
+			slog.String("value", value),
+		)
+		interval = cfg.NotificationInterval
+	}
+
+	cfg.NotificationInterval = interval
+
+	return cfg
 }
 
 func initDatabase(db *sql.DB) error {
@@ -133,7 +168,25 @@ func initDatabase(db *sql.DB) error {
 			expires_at INTEGER NOT NULL,
 			created_at INTEGER NOT NULL
 		);
+
+		CREATE TABLE IF NOT EXISTS config (
+			key   TEXT PRIMARY KEY,
+			value TEXT NOT NULL
+		);
+
+		INSERT OR IGNORE INTO config (key, value)
+		VALUES
+			('notification_interval', '15m');
 	`)
+
+	if err != nil {
+		cfg := DefaultConfig()
+		_, err = db.Exec(`
+			INSERT OR IGNORE INTO config (key, value)
+				VALUES (?, ?)
+			`, "notification_interval",
+			cfg.NotificationInterval.String())
+	}
 
 	if version != LatestDatabaseVersion {
 		setDatabaseVersion(db, LatestDatabaseVersion)
