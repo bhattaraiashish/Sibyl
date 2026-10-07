@@ -21,7 +21,7 @@ import (
 )
 
 type UserSession struct {
-	ID              string
+	ID              uuid.UUID
 	AccessToken     string
 	RefreshToken    string
 	ExpiresAt       time.Time
@@ -30,11 +30,11 @@ type UserSession struct {
 }
 
 type SessionCache struct {
-	syncmap.Map[string, UserSession]
+	syncmap.Map[uuid.UUID, UserSession]
 }
 
 type FlashCache struct {
-	syncmap.Map[string, FlashData]
+	syncmap.Map[uuid.UUID, FlashData]
 }
 
 type DiscordTokenResponse struct {
@@ -50,10 +50,10 @@ var (
 	_Templates map[string]*template.Template
 
 	_SessionCache = SessionCache{
-		Map: syncmap.NewMap[string, UserSession](),
+		Map: syncmap.NewMap[uuid.UUID, UserSession](),
 	}
 	_FlashCache = FlashCache{
-		Map: syncmap.NewMap[string, FlashData](),
+		Map: syncmap.NewMap[uuid.UUID, FlashData](),
 	}
 	_LogPath = ""
 )
@@ -230,7 +230,9 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if cookie, err := r.Cookie(_SessionCookieName); err == nil {
-		removeSession(cookie.Value)
+		if uuid, err := uuid.Parse(cookie.Value); err != nil {
+			removeSession(uuid)
+		}
 	}
 
 	http.SetCookie(w, &http.Cookie{
@@ -447,7 +449,7 @@ func createSession(w http.ResponseWriter, token DiscordTokenResponse) *UserSessi
 	now := time.Now()
 
 	session := UserSession{
-		ID:           uuid.NewString(),
+		ID:           uuid.New(),
 		AccessToken:  token.AccessToken,
 		RefreshToken: token.RefreshToken,
 		CreatedAt:    now,
@@ -463,7 +465,7 @@ func createSession(w http.ResponseWriter, token DiscordTokenResponse) *UserSessi
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     _SessionCookieName,
-		Value:    session.ID,
+		Value:    session.ID.String(),
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   false,
@@ -479,10 +481,15 @@ func getSession(r *http.Request) *UserSession {
 		return nil
 	}
 
-	session, ok := _SessionCache.Get(cookie.Value)
+	uuid, err := uuid.Parse(cookie.Value)
+	if err != nil {
+		return nil
+	}
+
+	session, ok := _SessionCache.Get(uuid)
 
 	if !ok {
-		sessionPtr := FindSession(cookie.Value)
+		sessionPtr := FindSession(uuid.String())
 		if sessionPtr == nil {
 			return nil
 		}
@@ -529,8 +536,8 @@ func updateSession(session UserSession) error {
 	return nil
 }
 
-func removeSession(sessionID string) {
-	if err := DeleteSession(sessionID); err != nil {
+func removeSession(sessionID uuid.UUID) {
+	if err := DeleteSession(sessionID.String()); err != nil {
 		slog.Error("failed to delete session", "error", err)
 	}
 	_SessionCache.Delete(sessionID)
@@ -578,11 +585,11 @@ func createLayout(session *UserSession, page Page, query string) LayoutData {
 //------------------------------------
 // Flash Message
 
-func createFlashMessage(sessionID string, flash FlashData) {
+func createFlashMessage(sessionID uuid.UUID, flash FlashData) {
 	_FlashCache.Set(sessionID, flash)
 }
 
-func getFlashMessage(sessionID string) *FlashData {
+func getFlashMessage(sessionID uuid.UUID) *FlashData {
 	flash, ok := _FlashCache.Get(sessionID)
 
 	if ok {
@@ -596,7 +603,7 @@ func getFlashMessage(sessionID string) *FlashData {
 	return &flash
 }
 
-func removeFlashMessage(sessionID string) {
+func removeFlashMessage(sessionID uuid.UUID) {
 	_FlashCache.Delete(sessionID)
 }
 
