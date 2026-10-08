@@ -16,17 +16,22 @@
 
 <section class="editable-table logs-table">
     <div class="editable-table-header">
-        Log file
+        {{ if and .User .User.IsDeveloper }}
+        {{ if .Logs }}Log files:{{ else }} No logs found.{{ end }}
+        {{ else }}
+        No permission to view logs.
+        {{ end }}
     </div>
 
-    {{range .Logs}}
+    {{ if and .User .User.IsDeveloper }}
+    {{ range .Logs }}
         <div class="editable-row editable-cell">
             <a class="log-file" href="{{.Path}}" target="_blank">
                 {{.Name}}
             </a>
         </div>
-    {{end}}
-
+    {{ end }}
+    {{ end }}
 </section>
 
 {{ end }}
