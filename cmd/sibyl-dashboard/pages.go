@@ -334,6 +334,12 @@ func overviewHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func logHandler(w http.ResponseWriter, r *http.Request) {
+	session := getSession(r)
+	if !sessionUserIsDeveloper(session) {
+		render404(w, r)
+		return
+	}
+
 	fileName := r.URL.Path[1:]
 	filePath := filepath.Join(_LogPath, fileName)
 	file, err := os.Open(filePath)
@@ -380,15 +386,7 @@ func updateSettingsPostHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	session := getSession(r)
-	hasPermission := false
-	if session != nil {
-		if user := getCachedSessionUser(session); user != nil {
-			if user.IsDeveloper {
-				// Don't depend on cached value
-				hasPermission = IsBotDeveloper(user.ID)
-			}
-		}
-	}
+	hasPermission := sessionUserIsDeveloper(session)
 
 	if !hasPermission {
 		renderUpdatedSettingsForm(w, hasPermission, "error", "No permission.")
@@ -571,6 +569,19 @@ func createLayout(session *UserSession, page Page, query string) LayoutData {
 		User:        getCachedSessionUser(session),
 	}
 	return layout
+}
+
+func sessionUserIsDeveloper(session *UserSession) bool {
+	hasPermission := false
+	if session != nil {
+		if user := getCachedSessionUser(session); user != nil {
+			if user.IsDeveloper {
+				// Don't depend on cached value
+				hasPermission = IsBotDeveloper(user.ID)
+			}
+		}
+	}
+	return hasPermission
 }
 
 //------------------------------------
