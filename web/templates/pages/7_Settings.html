@@ -13,7 +13,68 @@
     </div>
 </div>
 
-<form method="POST" action="/update/settings" id="settings-form">
+<div id="settings-content">
+    {{ template "settings_form" .Config }}
+</div>
+
+<script>
+    function initSettingsForm() {
+        const form = document.getElementById("settings-form");
+
+        if (!form) {
+            return;
+        }
+
+        const inputs = form.querySelectorAll("input");
+        const discardButton = document.getElementById("discard-changes");
+        const saveButton = document.getElementById("save-changes");
+
+        function updateEditState() {
+            let hasChanges = false;
+
+            inputs.forEach(input => {
+                const row = input.closest(".editable-row");
+                const edited = input.value !== input.dataset.originalValue;
+
+                row.classList.toggle("edited", edited);
+
+                if (edited) {
+                    hasChanges = true;
+                }
+            });
+
+            discardButton.disabled = !hasChanges;
+            saveButton.disabled = !hasChanges;
+        }
+
+        inputs.forEach(input => {
+            input.addEventListener("input", updateEditState);
+        });
+
+        discardButton.addEventListener("click", () => {
+            inputs.forEach(input => {
+                input.value = input.dataset.originalValue;
+            });
+
+            updateEditState();
+        });
+
+        updateEditState();
+    }
+
+    initSettingsForm();
+
+    document.body.addEventListener("htmx:afterSwap", () => {
+        initSettingsForm();
+    });
+</script>
+
+{{ end }}
+
+
+{{ define "settings_form" }}
+
+<form id="settings-form" hx-post="/update/settings" hx-target="#settings-content" hx-swap="innerHTML">
 
     <div class="editable-table">
         <div class="editable-table-header">
@@ -28,11 +89,11 @@
             </div>
 
             <div class="editable-cell">
-                {{ if .Config.CanEdit }}
-                <input type="number" name="notification_interval" value="{{ .Config.NotificationIntervalMins }}"
-                    data-original-value="{{ .Config.NotificationIntervalMins }}" min="1" step="1">
+                {{ if .CanEdit }}
+                <input type="number" name="notification_interval" value="{{ .NotificationIntervalMins }}"
+                    data-original-value="{{ .NotificationIntervalMins }}" min="1" step="1">
                 {{ else }}
-                <span>{{ .Config.NotificationIntervalMins }}</span>
+                <span>{{ .NotificationIntervalMins }}</span>
                 {{ end }}
             </div>
 
@@ -40,7 +101,7 @@
         </div>
     </div>
 
-    {{ if .Config.CanEdit }}
+    {{ if .CanEdit }}
     <div class="page-actions">
         <button id="discard-changes" class="button" type="button" disabled>
             Discard
@@ -53,46 +114,5 @@
     {{ end }}
 
 </form>
-
-{{ template "flash_box" . }}
-
-<script>
-    const form = document.getElementById("settings-form");
-    const inputs = form.querySelectorAll("input");
-    const discardButton = document.getElementById("discard-changes");
-    const saveButton = document.getElementById("save-changes");
-
-    function updateEditState() {
-        let hasChanges = false;
-
-        inputs.forEach(input => {
-            const row = input.closest(".editable-row");
-            const edited = input.value !== input.dataset.originalValue;
-
-            row.classList.toggle("edited", edited);
-
-            if (edited) {
-                hasChanges = true;
-            }
-        });
-
-        discardButton.disabled = !hasChanges;
-        saveButton.disabled = !hasChanges;
-    }
-
-    inputs.forEach(input => {
-        input.addEventListener("input", updateEditState);
-    });
-
-    discardButton.addEventListener("click", () => {
-        inputs.forEach(input => {
-            input.value = input.dataset.originalValue;
-        });
-
-        updateEditState();
-    });
-
-    updateEditState();
-</script>
 
 {{ end }}

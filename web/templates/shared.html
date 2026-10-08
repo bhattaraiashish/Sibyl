@@ -11,6 +11,8 @@
 </head>
 
 <body>
+    <div id="flash-container"></div>
+
     <div class="layout">
         <aside class="sidebar">
             <div class="logo">Sibyl</div>
@@ -73,16 +75,25 @@
 
         document.body.addEventListener("htmx:afterSwap", updateUptime);
 
-        const flash = document.getElementById("flash");
+        document.body.addEventListener("htmx:oobAfterSwap", (event) => {
+            if (event.detail.target.id !== "flash-container") {
+                return;
+            }
 
-        if (flash) {
+            const flash = document.getElementById("flash");
+
+            if (!flash) {
+                return;
+            }
+
             setTimeout(() => {
                 flash.classList.add("hidden");
+
                 setTimeout(() => {
                     flash.remove();
                 }, 300);
             }, 3000);
-        }
+        });
     </script>
 </body>
 
@@ -149,9 +160,9 @@
 {{ end }}
 
 {{ define "flash_box" }}
-{{ if .Flash }}
-<div id="flash" class="flash flash-{{ .Flash.Type }}">
-    {{ .Flash.Message }}
+<div id="flash-container" hx-swap-oob="innerHTML">
+    <div id="flash" class="flash flash-{{ .Type }}">
+        {{ .Description }}
+    </div>
 </div>
-{{ end }}
 {{ end }}

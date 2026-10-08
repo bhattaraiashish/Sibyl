@@ -33,10 +33,6 @@ type SessionCache struct {
 	syncmap.Map[uuid.UUID, UserSession]
 }
 
-type FlashCache struct {
-	syncmap.Map[uuid.UUID, FlashData]
-}
-
 type DiscordTokenResponse struct {
 	AccessToken  string `json:"access_token"`
 	TokenType    string `json:"token_type"`
@@ -52,10 +48,8 @@ var (
 	_SessionCache = SessionCache{
 		Map: syncmap.NewMap[uuid.UUID, UserSession](),
 	}
-	_FlashCache = FlashCache{
-		Map: syncmap.NewMap[uuid.UUID, FlashData](),
-	}
-	_LogPath = ""
+
+	_LogPath string
 )
 
 const (
@@ -105,15 +99,19 @@ func InitPages() {
 		})
 
 		_Templates[id] = template.Must(
-			template.ParseFiles("web/templates/layout.html", file),
+			template.ParseFiles("web/templates/shared.html", file),
 		)
 	}
 
 	_Templates["404"] = template.Must(
 		template.ParseFiles(
-			"web/templates/layout.html",
+			"web/templates/shared.html",
 			"web/templates/404.html",
 		),
+	)
+
+	_Templates["shared"] = template.Must(
+		template.ParseFiles("web/templates/shared.html"),
 	)
 
 	_Templates["error"] = template.Must(
@@ -336,15 +334,14 @@ func overviewHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func logHandler(w http.ResponseWriter, r *http.Request) {
-
 	fileName := r.URL.Path[1:]
 	filePath := filepath.Join(_LogPath, fileName)
 	file, err := os.Open(filePath)
-	defer file.Close()
 	if err != nil {
 		render404(w, r)
 		return
 	}
+	defer file.Close()
 
 	w.WriteHeader(http.StatusOK)
 
@@ -352,6 +349,28 @@ func logHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
 
 	_, err = io.Copy(w, file)
+}
+
+func renderFlashMessage(w http.ResponseWriter, _type, description string) {
+	flash := FlashMessage{
+		Type:        _type,
+		Description: description,
+	}
+	if err := _Templates["shared"].ExecuteTemplate(w, "flash_box", flash); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func renderUpdatedSettingsForm(w http.ResponseWriter, hasPermission bool, flashType, flashMessage string) {
+	renderFlashMessage(w, flashType, flashMessage)
+	cfg := config.LoadConfig(_Database)
+	data := ConfigData{
+		NotificationIntervalMins: int(cfg.NotificationInterval.Minutes()),
+		CanEdit:                  hasPermission,
+	}
+	if err := _Templates["settings"].ExecuteTemplate(w, "settings_form", data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func updateSettingsPostHandler(w http.ResponseWriter, r *http.Request) {
@@ -372,14 +391,7 @@ func updateSettingsPostHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !hasPermission {
-		if session != nil {
-			createFlashMessage(session.ID, FlashData{
-				Type:    "error",
-				Message: "No permission.",
-			})
-		}
-
-		http.Redirect(w, r, "/settings", http.StatusSeeOther)
+		renderUpdatedSettingsForm(w, hasPermission, "error", "No permission.")
 		return
 	}
 
@@ -387,12 +399,7 @@ func updateSettingsPostHandler(w http.ResponseWriter, r *http.Request) {
 		r.FormValue("notification_interval"),
 	)
 	if err != nil || notificationInterval < 1 {
-		createFlashMessage(session.ID, FlashData{
-			Type:    "error",
-			Message: "Invalid notification interval.",
-		})
-
-		http.Redirect(w, r, "/settings", http.StatusSeeOther)
+		renderUpdatedSettingsForm(w, hasPermission, "error", "Invalid notification interval.")
 		return
 	}
 
@@ -400,18 +407,10 @@ func updateSettingsPostHandler(w http.ResponseWriter, r *http.Request) {
 		NotificationInterval: time.Duration(max(1, notificationInterval)) * time.Minute,
 	}
 	if config.SaveConfig(_Database, cfg) {
-		createFlashMessage(session.ID, FlashData{
-			Type:    "success",
-			Message: "Settings saved.",
-		})
+		renderUpdatedSettingsForm(w, hasPermission, "success", "Settings saved.")
 	} else {
-		createFlashMessage(session.ID, FlashData{
-			Type:    "error",
-			Message: "Failed to write to database.",
-		})
+		renderUpdatedSettingsForm(w, hasPermission, "error", "Failed to write to database.")
 	}
-
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
 func render404(w http.ResponseWriter, r *http.Request) {
@@ -541,7 +540,6 @@ func removeSession(sessionID uuid.UUID) {
 		slog.Error("failed to delete session", "error", err)
 	}
 	_SessionCache.Delete(sessionID)
-	removeFlashMessage(sessionID)
 }
 
 func getCachedSessionUser(session *UserSession) *UserData {
@@ -565,46 +563,14 @@ func getCachedSessionUser(session *UserSession) *UserData {
 }
 
 func createLayout(session *UserSession, page Page, query string) LayoutData {
-	var flash *FlashData
-
-	if session != nil {
-		flash = getFlashMessage(session.ID)
-	}
-
 	layout := LayoutData{
 		Title:       page.Title,
 		Page:        page.Path,
 		Pages:       _Pages,
 		SearchQuery: query,
 		User:        getCachedSessionUser(session),
-		Flash:       flash,
 	}
 	return layout
-}
-
-//------------------------------------
-// Flash Message
-
-func createFlashMessage(sessionID uuid.UUID, flash FlashData) {
-	_FlashCache.Set(sessionID, flash)
-}
-
-func getFlashMessage(sessionID uuid.UUID) *FlashData {
-	flash, ok := _FlashCache.Get(sessionID)
-
-	if ok {
-		_FlashCache.Delete((sessionID))
-	}
-
-	if !ok {
-		return nil
-	}
-
-	return &flash
-}
-
-func removeFlashMessage(sessionID uuid.UUID) {
-	_FlashCache.Delete(sessionID)
 }
 
 //------------------------------------

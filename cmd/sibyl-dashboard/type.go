@@ -27,9 +27,9 @@ type UserData struct {
 	IsDeveloper bool
 }
 
-type FlashData struct {
-	Type    string
-	Message string
+type FlashMessage struct {
+	Type        string
+	Description string
 }
 
 type LayoutData struct {
@@ -40,7 +40,6 @@ type LayoutData struct {
 	Guilds        []Guild
 	SelectedGuild Guild
 	User          *UserData
-	Flash         *FlashData
 }
 
 type DashboardData struct {
