@@ -11,8 +11,6 @@
             {{ template "user_profile" . }}
         </div>
     </div>
-
-    {{ template "search" . }}
 </div>
 
 <section class="editable-table">
@@ -25,29 +23,22 @@
     <div class="editable-row">
         <div class="editable-cell">
             <div class="guild-info">
-                <div class="guild-icon">?</div>
+                <img class="guild-icon" src="/static/default-avatar.svg" alt="">
                 <div class="guild-name">My Server</div>
             </div>
         </div>
 
         <div class="editable-cell">
             <div class="features">
-                <div class="feature">
-                    RSS
-                    <button class="feature-remove" type="button">×</button>
-                </div>
+                <label class="feature-toggle">
+                    <input type="checkbox" name="rss" checked>
+                    <span>RSS</span>
+                </label>
 
-                <div class="feature">
-                    Anime
-                    <button class="feature-remove" type="button">×</button>
-                </div>
-
-                <div class="feature">
-                    Timezone
-                    <button class="feature-remove" type="button">×</button>
-                </div>
-
-                <button class="feature-add" type="button">+</button>
+                <label class="feature-toggle">
+                    <input type="checkbox" name="anime">
+                    <span>Anime</span>
+                </label>
             </div>
         </div>
 
@@ -57,25 +48,27 @@
     <div class="editable-row">
         <div class="editable-cell">
             <div class="guild-info">
-                <div class="guild-icon">?</div>
-                <div class="guild-name">Another Server</div>
+                <div class="guild-icon">ES</div>
+                <div class="guild-name">Example Server</div>
             </div>
         </div>
 
         <div class="editable-cell">
             <div class="features">
-                <div class="feature">
-                    RSS
-                    <button class="feature-remove" type="button">×</button>
-                </div>
+                <label class="feature-toggle">
+                    <input type="checkbox" name="rss" checked>
+                    <span>RSS</span>
+                </label>
 
-                <button class="feature-add" type="button">+</button>
+                <label class="feature-toggle">
+                    <input type="checkbox" name="anime">
+                    <span>Anime</span>
+                </label>
             </div>
         </div>
 
         <div class="editable-actions"></div>
     </div>
-
 </section>
 
 <div class="page-actions">
