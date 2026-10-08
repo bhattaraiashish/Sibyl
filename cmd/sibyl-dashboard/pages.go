@@ -125,7 +125,11 @@ func RegisterHandlers(mux *http.ServeMux) {
 		http.FileServer(http.Dir("web/static")),
 	))
 
-	mux.Handle("/logs/view/", http.StripPrefix("/logs/view", http.HandlerFunc(logHandler)))
+	mux.Handle("/logs/view/", http.StripPrefix("/logs/view",
+		developerMiddleware(
+			http.HandlerFunc(logHandler),
+			http.HandlerFunc(render404)),
+	))
 
 	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/static/favicon.ico")
@@ -135,9 +139,23 @@ func RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("/discord/callback", discordLoginCallbackHandler)
 	mux.HandleFunc("/logout", logoutHandler)
 
-	mux.HandleFunc("/update/settings", updateSettingsPostHandler)
+	mux.Handle("/update/settings", developerMiddleware(
+		http.HandlerFunc(updateSettingsPostHandler),
+		http.HandlerFunc(renderNoPermissionSettingsPostHandler),
+	))
 	mux.HandleFunc("/api/overview", overviewHandler)
 	mux.HandleFunc("/", pageHandler)
+}
+
+func developerMiddleware(forward, noPermissionPage http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		session := getSession(r)
+		if !sessionUserIsDeveloper(session) {
+			noPermissionPage.ServeHTTP(w, r)
+			return
+		}
+		forward.ServeHTTP(w, r)
+	})
 }
 
 func discordLoginHandler(w http.ResponseWriter, r *http.Request) {
@@ -334,12 +352,6 @@ func overviewHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func logHandler(w http.ResponseWriter, r *http.Request) {
-	session := getSession(r)
-	if !sessionUserIsDeveloper(session) {
-		render404(w, r)
-		return
-	}
-
 	fileName := r.URL.Path[1:]
 	filePath := filepath.Join(_LogPath, fileName)
 	file, err := os.Open(filePath)
@@ -367,12 +379,24 @@ func renderFlashMessage(w http.ResponseWriter, _type, description string) {
 	}
 }
 
-func renderUpdatedSettingsForm(w http.ResponseWriter, hasPermission bool, flashType, flashMessage string) {
+func renderUpdatedSettingsForm(w http.ResponseWriter, flashType, flashMessage string) {
 	renderFlashMessage(w, flashType, flashMessage)
 	cfg := config.LoadConfig(_Database)
 	data := ConfigData{
 		NotificationIntervalMins: int(cfg.NotificationInterval.Minutes()),
-		CanEdit:                  hasPermission,
+		CanEdit:                  true,
+	}
+	if err := _Templates["settings"].ExecuteTemplate(w, "settings_form", data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func renderNoPermissionSettingsPostHandler(w http.ResponseWriter, r *http.Request) {
+	renderFlashMessage(w, "error", "No permission.")
+	cfg := config.LoadConfig(_Database)
+	data := ConfigData{
+		NotificationIntervalMins: int(cfg.NotificationInterval.Minutes()),
+		CanEdit:                  true,
 	}
 	if err := _Templates["settings"].ExecuteTemplate(w, "settings_form", data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -385,19 +409,11 @@ func updateSettingsPostHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session := getSession(r)
-	hasPermission := sessionUserIsDeveloper(session)
-
-	if !hasPermission {
-		renderUpdatedSettingsForm(w, hasPermission, "error", "No permission.")
-		return
-	}
-
 	notificationInterval, err := strconv.Atoi(
 		r.FormValue("notification_interval"),
 	)
 	if err != nil || notificationInterval < 1 {
-		renderUpdatedSettingsForm(w, hasPermission, "error", "Invalid notification interval.")
+		renderUpdatedSettingsForm(w, "error", "Invalid notification interval.")
 		return
 	}
 
@@ -405,9 +421,9 @@ func updateSettingsPostHandler(w http.ResponseWriter, r *http.Request) {
 		NotificationInterval: time.Duration(max(1, notificationInterval)) * time.Minute,
 	}
 	if config.SaveConfig(_Database, cfg) {
-		renderUpdatedSettingsForm(w, hasPermission, "success", "Settings saved.")
+		renderUpdatedSettingsForm(w, "success", "Settings saved.")
 	} else {
-		renderUpdatedSettingsForm(w, hasPermission, "error", "Failed to write to database.")
+		renderUpdatedSettingsForm(w, "error", "Failed to write to database.")
 	}
 }
 
