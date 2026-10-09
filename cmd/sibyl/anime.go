@@ -20,6 +20,13 @@ import (
 	"github.com/bhattaraiashish/Sibyl/internal/anilist"
 )
 
+type TrackedAnimeRecord struct {
+	animeID             int
+	channelID           snowflake.ID
+	lastNotifiedEpisode int
+	lastUpdatedTime     int64
+}
+
 func InitAnimeFeatures(ctx *BotContext) {
 	CommandBuild(ctx, "anime", "Manage anime").
 		SubCommand(
@@ -324,11 +331,16 @@ func TrackedAnime(
 	var upcoming []*anilist.Media
 
 	for _, anime := range animeList {
-		if anime.NextAiringEpisode == nil {
+		animeMedia, err := anilist.GetAnime(ctx.HTTP, anime.animeID)
+		if err != nil {
+			slog.Error("failed to fetch anime", slog.Any("error", err))
+			continue
+		}
+		if animeMedia.NextAiringEpisode == nil {
 			continue
 		}
 
-		upcoming = append(upcoming, anime)
+		upcoming = append(upcoming, animeMedia)
 	}
 
 	sort.Slice(
@@ -457,11 +469,7 @@ func TodayAnime(
 	event *events.ApplicationCommandInteractionCreate,
 	args map[string]string,
 ) {
-	upcoming, timezone, err := getUpcomingAnime(
-		ctx,
-		*event.GuildID(),
-		event.Member().User.ID,
-	)
+	animeList, err := getTrackedAnime(ctx, *event.GuildID())
 
 	if err != nil {
 		slog.Error(
@@ -482,38 +490,71 @@ func TodayAnime(
 		return
 	}
 
-	location := time.UTC
-
-	if len(upcoming) > 0 {
-		location = upcoming[0].AiringAt.Location()
+	timezone := getUserTimezone(ctx, event.Member().User.ID)
+	location, err := time.LoadLocation(timezone)
+	if err != nil {
+		slog.Error("failed to load location", slog.String("timezone", timezone), slog.Any("error", err))
+		timezone = "UTC"
 	}
 
-	now := time.Now().In(location)
-	start := now.Add(-12 * time.Hour)
-	end := now.Add(12 * time.Hour)
+	now := time.Now()
+	start := now.Add(-12 * time.Hour).Unix()
+	end := now.Add(12 * time.Hour).Unix()
 
 	var description DescriptionBuilder
 
-	for _, episode := range upcoming {
-		if episode.AiringAt.Before(start) ||
-			episode.AiringAt.After(end) {
+	for _, anime := range animeList {
+		animeMedia, err := anilist.GetAnime(ctx.HTTP, anime.animeID)
+		if err != nil {
+			slog.Error("failed to fetch anime", slog.Any("error", err))
 			continue
 		}
 
-		title := getAnimeTitle(episode.Anime)
+		released := anime.lastUpdatedTime >= start && anime.lastUpdatedTime <= end
+		upcoming := false
+
+		if animeMedia.NextAiringEpisode != nil {
+			upcoming = animeMedia.NextAiringEpisode.AiringAt >= start && animeMedia.NextAiringEpisode.AiringAt <= end
+		}
+
+		if !released && !upcoming {
+			continue
+		}
+
+		title := getAnimeTitle(animeMedia)
 		title = fmt.Sprintf(
 			"[%s](https://anilist.co/anime/%d)",
 			title,
-			episode.Anime.Id,
+			anime.animeID,
 		)
 
-		line := fmt.Sprintf(
-			"%d. %s — Episode %d — %s",
-			description.Len()+1,
-			title,
-			episode.Episode,
-			episode.AiringAt.Format("15:04"),
-		)
+		var line string
+
+		if released {
+			releasedAt := time.Unix(anime.lastUpdatedTime, 0)
+			if location != nil {
+				releasedAt = releasedAt.In(location)
+			}
+			line = fmt.Sprintf(
+				"%d. %s — Episode %d — %s (Released)",
+				description.Len()+1,
+				title,
+				anime.lastNotifiedEpisode,
+				releasedAt.Format("15:04"),
+			)
+		} else {
+			airingAt := time.Unix(animeMedia.NextAiringEpisode.AiringAt, 0)
+			if location != nil {
+				airingAt = airingAt.In(location)
+			}
+			line = fmt.Sprintf(
+				"%d. %s — Episode %d — %s",
+				description.Len()+1,
+				title,
+				animeMedia.NextAiringEpisode.Episode,
+				airingAt.Format("15:04"),
+			)
+		}
 
 		if !description.AddLine(line) {
 			break
@@ -1091,17 +1132,7 @@ func formatCountdown(target time.Time) string {
 	)
 }
 
-type UpcomingAnime struct {
-	Anime    *anilist.Media
-	Episode  int
-	AiringAt time.Time
-}
-
-func getUpcomingAnime(
-	ctx *BotContext,
-	guildID snowflake.ID,
-	userID snowflake.ID,
-) ([]UpcomingAnime, string, error) {
+func getUserTimezone(ctx *BotContext, userID snowflake.ID) string {
 	var timezone string
 
 	err := ctx.DB.QueryRow(`
@@ -1113,9 +1144,25 @@ func getUpcomingAnime(
 	if err == sql.ErrNoRows {
 		timezone = "UTC"
 	} else if err != nil {
-		return nil, "", err
+		slog.Error("failed to fetch user time location. default=UTC used")
+		timezone = "UTC"
 	}
 
+	return timezone
+}
+
+type UpcomingAnime struct {
+	Anime    *anilist.Media
+	Episode  int
+	AiringAt time.Time
+}
+
+func getUpcomingAnime(
+	ctx *BotContext,
+	guildID snowflake.ID,
+	userID snowflake.ID,
+) ([]UpcomingAnime, string, error) {
+	timezone := getUserTimezone(ctx, userID)
 	location, err := time.LoadLocation(timezone)
 	if err != nil {
 		return nil, "", err
@@ -1129,17 +1176,22 @@ func getUpcomingAnime(
 	var upcoming []UpcomingAnime
 
 	for _, anime := range animeList {
-		if anime.NextAiringEpisode == nil {
+		animeMedia, err := anilist.GetAnime(ctx.HTTP, anime.animeID)
+		if err != nil {
+			slog.Error("failed to fetch anime", slog.Any("error", err))
+			continue
+		}
+		if animeMedia.NextAiringEpisode == nil {
 			continue
 		}
 
 		upcoming = append(
 			upcoming,
 			UpcomingAnime{
-				Anime:   anime,
-				Episode: anime.NextAiringEpisode.Episode,
+				Anime:   animeMedia,
+				Episode: animeMedia.NextAiringEpisode.Episode,
 				AiringAt: time.Unix(
-					anime.NextAiringEpisode.AiringAt,
+					animeMedia.NextAiringEpisode.AiringAt,
 					0,
 				).In(location),
 			},
@@ -1303,51 +1355,62 @@ func disableAnimeNotifications(
 		SendMessage(ctx, event)
 }
 
-func getTrackedAnime(
-	ctx *BotContext,
-	guildID snowflake.ID,
-) ([]*anilist.Media, error) {
+func getTrackedAnime(ctx *BotContext, guildID snowflake.ID) ([]TrackedAnimeRecord, error) {
+	var trackedAnime []TrackedAnimeRecord
+
 	rows, err := ctx.DB.Query(`
-		SELECT anime_id
+		SELECT
+			anime_id,
+			channel_id,
+			last_notified_episode,
+			last_updated_time
 		FROM tracked_anime
 		WHERE guild_id = ?
-		ORDER BY anime_id
 	`, guildID)
 
 	if err != nil {
-		return nil, err
+		slog.Error(
+			"failed to query tracked anime",
+			slog.Any("err", err),
+			slog.String("guild_id", guildID.String()),
+		)
+		return trackedAnime, err
 	}
-	defer rows.Close()
-
-	client := &http.Client{}
-
-	var animeList []*anilist.Media
 
 	for rows.Next() {
-		var id int
+		var anime TrackedAnimeRecord
 
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-
-		anime, err := anilist.GetAnime(client, id)
-		if err != nil {
+		if err := rows.Scan(
+			&anime.animeID,
+			&anime.channelID,
+			&anime.lastNotifiedEpisode,
+			&anime.lastUpdatedTime,
+		); err != nil {
 			slog.Error(
-				"failed to get tracked anime",
+				"failed to scan tracked anime",
 				slog.Any("err", err),
-				slog.Int("anime_id", id),
+				slog.String("guild_id", guildID.String()),
 			)
 			continue
 		}
 
-		animeList = append(animeList, anime)
+		trackedAnime = append(
+			trackedAnime,
+			anime,
+		)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, err
+		slog.Error(
+			"failed while reading tracked anime",
+			slog.Any("err", err),
+			slog.String("guild_id", guildID.String()),
+		)
 	}
 
-	return animeList, nil
+	rows.Close()
+
+	return trackedAnime, nil
 }
 
 var ErrAnimePermissionDenied = errors.New(
@@ -1685,66 +1748,10 @@ func checkGuildAnime(
 	guildID snowflake.ID,
 	now int64,
 ) {
-	type TrackedAnime struct {
-		animeID             int
-		channelID           snowflake.ID
-		lastNotifiedEpisode int
-		lastUpdatedTime     int64
-	}
-
-	rows, err := ctx.DB.Query(`
-		SELECT
-			anime_id,
-			channel_id,
-			last_notified_episode,
-			last_updated_time
-		FROM tracked_anime
-		WHERE guild_id = ?
-	`, guildID)
-
+	trackedAnime, err := getTrackedAnime(ctx, guildID)
 	if err != nil {
-		slog.Error(
-			"failed to query tracked anime",
-			slog.Any("err", err),
-			slog.String("guild_id", guildID.String()),
-		)
 		return
 	}
-
-	var trackedAnime []TrackedAnime
-
-	for rows.Next() {
-		var anime TrackedAnime
-
-		if err := rows.Scan(
-			&anime.animeID,
-			&anime.channelID,
-			&anime.lastNotifiedEpisode,
-			&anime.lastUpdatedTime,
-		); err != nil {
-			slog.Error(
-				"failed to scan tracked anime",
-				slog.Any("err", err),
-				slog.String("guild_id", guildID.String()),
-			)
-			continue
-		}
-
-		trackedAnime = append(
-			trackedAnime,
-			anime,
-		)
-	}
-
-	if err := rows.Err(); err != nil {
-		slog.Error(
-			"failed while reading tracked anime",
-			slog.Any("err", err),
-			slog.String("guild_id", guildID.String()),
-		)
-	}
-
-	rows.Close()
 
 	// The SELECT above is finished and closed before any writes.
 	for _, tracked := range trackedAnime {
