@@ -851,6 +851,8 @@ func SetAnimeCheckInterval(interval time.Duration) {
 }
 
 func CheckTrackedAnime(ctx *BotContext) {
+	slog.Info("Checking for tracked anime...")
+
 	type NotificationSetting struct {
 		guildID     snowflake.ID
 		lastChecked int64
@@ -858,12 +860,12 @@ func CheckTrackedAnime(ctx *BotContext) {
 
 	rows, err := ctx.DB.Query(`
 		SELECT
-			n.guild_id,
-			n.last_checked
-		FROM guild_anime_notifications n
-		JOIN guilds g
-			ON g.guild_id = n.guild_id
-		WHERE (g.features & ?) != 0
+			g.guild_id,
+			COALESCE(n.last_checked, 0) AS last_checked
+		FROM guilds g
+		LEFT JOIN guild_anime_notifications n
+			ON n.guild_id = g.guild_id
+		WHERE (g.features & ?) != 0;
 	`, FeatureAnime)
 	if err != nil {
 		slog.Error(
@@ -917,9 +919,10 @@ func CheckTrackedAnime(ctx *BotContext) {
 		)
 
 		_, err = ctx.DB.Exec(`
-			UPDATE guild_anime_notifications
-			SET last_checked = ?
-			WHERE guild_id = ?
+			INSERT INTO guild_anime_notifications (guild_id, last_checked)
+			VALUES (?, ?)
+			ON CONFLICT(guild_id)
+			DO UPDATE SET last_checked = excluded.last_checked;
 		`,
 			now,
 			setting.guildID,
