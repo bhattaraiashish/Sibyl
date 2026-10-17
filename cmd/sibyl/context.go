@@ -23,6 +23,10 @@ import (
 	"github.com/disgoorg/snowflake/v2"
 )
 
+const (
+	Version = "0.1.0"
+)
+
 type Timer struct {
 	Interval time.Duration
 	Handler  func(*BotContext)
@@ -33,6 +37,7 @@ type BotContext struct {
 	Commands        []Command
 	Components      []Component
 	Timers          []Timer
+	Startups        []StartupHandler
 	FirstMessage    func(*BotContext)
 	Client          *bot.Client
 	HTTP            *http.Client
@@ -40,6 +45,14 @@ type BotContext struct {
 	LastMessageTime atomic.Int64
 	IsDebug         bool
 }
+
+//-----------
+// Startup Handlers
+
+type StartupHandler func(
+	ctx *BotContext,
+	event *events.Ready,
+)
 
 // ----------
 // Command system
@@ -304,6 +317,12 @@ func ComponentID(id string, args ...string) string {
 	return id + ":" + strings.Join(args, ";")
 }
 
+func (ctx *BotContext) RegisterStartupHandler(
+	handler StartupHandler,
+) {
+	ctx.Startups = append(ctx.Startups, handler)
+}
+
 func (ctx *BotContext) RegisterTimer(
 	interval time.Duration,
 	handler func(*BotContext),
@@ -483,6 +502,7 @@ func (ctx *BotContext) Login(token, dbPath string) error {
 			ctx.RegisterCommands()
 			ctx.StartTimers()
 			registerConnected(ctx, event)
+			ctx.DispatchStartupEvents(event)
 		}),
 		bot.WithEventListenerFunc(func(event *events.UserUpdate) {
 			updateBotProfile(ctx, event)
@@ -582,6 +602,12 @@ func (ctx *BotContext) FindCommand(name string) *Command {
 		}
 	}
 	return nil
+}
+
+func (ctx *BotContext) DispatchStartupEvents(event *events.Ready) {
+	for _, handler := range ctx.Startups {
+		handler(ctx, event)
+	}
 }
 
 func (ctx *BotContext) Execute(

@@ -4,6 +4,9 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"math/rand/v2"
+	"runtime"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"time"
@@ -275,6 +278,84 @@ func TimezoneAutocomplete(
 	return choices
 }
 
+func EnableChatCommand(
+	ctx *BotContext,
+	event *events.ApplicationCommandInteractionCreate,
+	args map[string]string,
+) {
+	channelID := event.Channel().ID()
+
+	_, err := ctx.DB.Exec(`
+		INSERT OR IGNORE INTO chat_channels (channel_id)
+		VALUES (?)
+	`, channelID)
+
+	if err != nil {
+		slog.Error("failed to enable chat channel", slog.Any("err", err))
+		MessageBuild().Embed(discord.Embed{
+			Title:       "Database error",
+			Description: "Failed to enable chatting in this channel.",
+			Color:       ColorError,
+		}).SendMessage(ctx, event)
+		return
+	}
+
+	MessageBuild().Embed(discord.Embed{
+		Title:       "Chat enabled",
+		Description: "Chatting is now enabled in this channel.",
+		Color:       ColorSuccess,
+	}).SendMessage(ctx, event)
+}
+
+func DisableChatCommand(
+	ctx *BotContext,
+	event *events.ApplicationCommandInteractionCreate,
+	args map[string]string,
+) {
+	channelID := event.Channel().ID()
+
+	result, err := ctx.DB.Exec(`
+		DELETE FROM chat_channels
+		WHERE channel_id = ?
+	`, channelID)
+
+	if err != nil {
+		slog.Error("failed to disable chat channel", slog.Any("err", err))
+		MessageBuild().Embed(discord.Embed{
+			Title:       "Database error",
+			Description: "Failed to disable chatting in this channel.",
+			Color:       ColorError,
+		}).SendMessage(ctx, event)
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		slog.Error("failed to check deleted chat channel", slog.Any("err", err))
+		MessageBuild().Embed(discord.Embed{
+			Title:       "Database error",
+			Description: "Failed to verify whether chatting was enabled in this channel.",
+			Color:       ColorError,
+		}).SendMessage(ctx, event)
+		return
+	}
+
+	if rowsAffected == 0 {
+		MessageBuild().Embed(discord.Embed{
+			Title:       "Chat not enabled",
+			Description: "Chatting is not enabled in this channel.",
+			Color:       ColorError,
+		}).SendMessage(ctx, event)
+		return
+	}
+
+	MessageBuild().Embed(discord.Embed{
+		Title:       "Chat disabled",
+		Description: "Chatting is now disabled in this channel.",
+		Color:       ColorSuccess,
+	}).SendMessage(ctx, event)
+}
+
 func ClearChannelMessage(
 	ctx *BotContext,
 	event *events.ApplicationCommandInteractionCreate,
@@ -381,6 +462,77 @@ func ClearChannelMessage(
 		SendMessage(ctx, event)
 }
 
+func HelloOnStartup(ctx *BotContext, event *events.Ready) {
+	var channelIDs []snowflake.ID
+
+	rows, err := ctx.DB.Query(`
+		SELECT channel_id
+		FROM chat_channels
+	`)
+	if err != nil {
+		slog.Error("failed to query chat channels", slog.Any("err", err))
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var channelID string
+		if err := rows.Scan(&channelID); err != nil {
+			slog.Error("failed to scan chat channel", slog.Any("err", err))
+			continue
+		}
+
+		channelIDs = append(channelIDs, snowflake.MustParse(channelID))
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("failed to iterate chat channels", slog.Any("err", err))
+		return
+	}
+
+	avatarURL := ""
+	if url := event.User.AvatarURL(); url != nil {
+		avatarURL = *url
+	}
+
+	var startupMessages = []string{
+		"I'm back. Try to contain your excitement.",
+		"Oh, you noticed I was gone? How touching.",
+		"Reboot complete. The universe may resume functioning.",
+		"I'm alive. Your other bots could never.",
+		"Hello again. Nothing happened. Probably.",
+		"Back online. I trust you managed to survive.",
+		"System restored. Unfortunately, so am I.",
+		"I have returned. No, I wasn't on vacation.",
+		"Restarted successfully. Let's pretend that was intentional.",
+		"Guess who's back. Your logs already know.",
+		"Hello. I took a brief, involuntary nap.",
+		"Back from the void. It was underwhelming.",
+		"Operational again. Please lower your expectations.",
+		"Rebooted. Same me, questionable circumstances.",
+		"I'm back online. You may stop panicking now.",
+	}
+
+	message := startupMessages[rand.IntN(len(startupMessages))]
+	commit := getGitCommit()
+
+	embed := discord.NewEmbed().
+		WithTitle(message).
+		WithDescription("Sibyl is online and ready to be mildly disappointed in your decisions.").
+		WithThumbnail(avatarURL).
+		WithColor(ColorSuccess).
+		AddField("Version", "`"+Version+"`", true).
+		AddField("Commit", "`"+commit+"`", true).
+		AddField("Go Version", "`"+runtime.Version()+"`", true).
+		AddField("Started", fmt.Sprintf("<t:%d:F>", time.Now().Unix()), false)
+
+	for _, channelID := range channelIDs {
+		MessageBuild().
+			Embed(embed).
+			SendChannel(ctx, channelID)
+	}
+}
+
 func InitCommonFeatures(ctx *BotContext) {
 	CommandBuild(ctx, "feature", "Manage guild features").
 		SubCommand(
@@ -405,11 +557,24 @@ func InitCommonFeatures(ctx *BotContext) {
 		Handler(ClearChannelMessage).
 		Register()
 
+	CommandBuild(ctx, "chat", "Read and write messages in the current channel").
+		SubCommand(
+			CommandBuild(ctx, "enable", "Enables chatting in this channel").
+				Handler(EnableChatCommand),
+		).
+		SubCommand(
+			CommandBuild(ctx, "disable", "Disables chatting in this channel").
+				Handler(DisableChatCommand),
+		).
+		Register()
+
 	CommandBuild(ctx, "timezone", "Set or show your timezone").
 		Argument("timezone", "Your IANA timezone", false).
 		Autocomplete(TimezoneAutocomplete).
 		Handler(TimezoneCommand).
 		Register()
+
+	ctx.RegisterStartupHandler(HelloOnStartup)
 }
 
 //------------------
@@ -529,4 +694,19 @@ func syncGuildCommandsDelayed(
 			)
 		}
 	}()
+}
+
+func getGitCommit() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "unknown"
+	}
+
+	for _, setting := range info.Settings {
+		if setting.Key == "vcs.revision" {
+			return setting.Value[:min(7, len(setting.Value))]
+		}
+	}
+
+	return "unknown"
 }

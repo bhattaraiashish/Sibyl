@@ -192,6 +192,10 @@ func initDatabase(db *sql.DB) error {
 			value TEXT NOT NULL
 		);
 
+		CREATE TABLE IF NOT EXISTS chat_channels (
+			channel_id TEXT PRIMARY KEY
+		);
+
 		INSERT OR IGNORE INTO config (key, value)
 		VALUES
 			('notification_interval', '15m');
