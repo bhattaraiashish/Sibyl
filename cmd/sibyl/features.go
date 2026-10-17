@@ -283,6 +283,18 @@ func EnableChatCommand(
 	event *events.ApplicationCommandInteractionCreate,
 	args map[string]string,
 ) {
+	permissions := event.Member().Permissions
+
+	if permissions&discord.PermissionAdministrator == 0 &&
+		permissions&discord.PermissionManageGuild == 0 {
+		MessageBuild().Embed(discord.Embed{
+			Title:       "Insufficient permissions",
+			Description: "You need the **Administrator** or **Manage Server** permission to use this command.",
+			Color:       ColorError,
+		}).SendMessage(ctx, event)
+		return
+	}
+
 	channelID := event.Channel().ID()
 
 	_, err := ctx.DB.Exec(`
@@ -312,6 +324,18 @@ func DisableChatCommand(
 	event *events.ApplicationCommandInteractionCreate,
 	args map[string]string,
 ) {
+	permissions := event.Member().Permissions
+
+	if permissions&discord.PermissionAdministrator == 0 &&
+		permissions&discord.PermissionManageGuild == 0 {
+		MessageBuild().Embed(discord.Embed{
+			Title:       "Insufficient permissions",
+			Description: "You need the **Administrator** or **Manage Server** permission to use this command.",
+			Color:       ColorError,
+		}).SendMessage(ctx, event)
+		return
+	}
+
 	channelID := event.Channel().ID()
 
 	result, err := ctx.DB.Exec(`
@@ -462,6 +486,37 @@ func ClearChannelMessage(
 		SendMessage(ctx, event)
 }
 
+func InfoMessage(
+	ctx *BotContext,
+	event *events.ApplicationCommandInteractionCreate,
+	args map[string]string,
+) {
+	commit := getGitCommit()
+
+	embed := discord.NewEmbed().
+		WithTitle("Info").
+		WithColor(ColorSuccess).
+		AddField("Version", "`"+Version+"`", true).
+		AddField("Commit", "`"+commit+"`", true).
+		AddField("Go Version", "`"+runtime.Version()+"`", true)
+
+	var connectedAt int64
+
+	err := ctx.DB.QueryRow(`
+		SELECT connected_at FROM bot_status WHERE id = 1
+	`).Scan(&connectedAt)
+
+	if err == nil {
+		embed = embed.AddField("Started", fmt.Sprintf("<t:%d:F>", connectedAt), false)
+	} else {
+		slog.Error("failed to query connected_at", "error", err)
+	}
+
+	MessageBuild().
+		Embed(embed).
+		SendMessage(ctx, event)
+}
+
 func HelloOnStartup(ctx *BotContext, event *events.Ready) {
 	var channelIDs []snowflake.ID
 
@@ -555,6 +610,10 @@ func InitCommonFeatures(ctx *BotContext) {
 
 	CommandBuild(ctx, "clear", "Clears upto last 100 bot messages").
 		Handler(ClearChannelMessage).
+		Register()
+
+	CommandBuild(ctx, "info", "Information about the currently deployed bot").
+		Handler(InfoMessage).
 		Register()
 
 	CommandBuild(ctx, "chat", "Read and write messages in the current channel").
