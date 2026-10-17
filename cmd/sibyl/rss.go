@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
@@ -63,6 +64,10 @@ func RSSAdd(
 	url := args["url"]
 
 	parser := gofeed.NewParser()
+	parser.Client = &http.Client{
+		Timeout: 15 * time.Second,
+	}
+	parser.UserAgent = "Sibyl/0.1.0"
 
 	feed, err := parser.ParseURL(url)
 	if err != nil {
