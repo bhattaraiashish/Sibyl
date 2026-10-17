@@ -50,6 +50,8 @@ var (
 	}
 
 	_LogPath string
+
+	_InDevEnvironment bool
 )
 
 const (
@@ -59,6 +61,8 @@ const (
 )
 
 func InitPages() {
+	_InDevEnvironment, _ = strconv.ParseBool(os.Getenv("SIBYL_DEBUG"))
+
 	_Templates = make(map[string]*template.Template)
 
 	_LogPath = os.Getenv("LOG_PATH")
@@ -166,7 +170,7 @@ func discordLoginHandler(w http.ResponseWriter, r *http.Request) {
 		Value:    state,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   false,
+		Secure:   !_InDevEnvironment,
 		SameSite: http.SameSiteLaxMode,
 	})
 
@@ -175,7 +179,7 @@ func discordLoginHandler(w http.ResponseWriter, r *http.Request) {
 		Value:    r.URL.Query().Get("page"),
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   false,
+		Secure:   !_InDevEnvironment,
 		SameSite: http.SameSiteLaxMode,
 	})
 
@@ -257,7 +261,7 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   false,
+		Secure:   !_InDevEnvironment,
 		SameSite: http.SameSiteLaxMode,
 	})
 
@@ -481,7 +485,7 @@ func createSession(w http.ResponseWriter, token DiscordTokenResponse) *UserSessi
 		Value:    session.ID.String(),
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   false,
+		Secure:   !_InDevEnvironment,
 		SameSite: http.SameSiteLaxMode,
 	})
 
