@@ -892,8 +892,6 @@ func SetAnimeCheckInterval(interval time.Duration) {
 }
 
 func CheckTrackedAnime(ctx *BotContext) {
-	slog.Info("Checking for tracked anime...")
-
 	type NotificationSetting struct {
 		guildID     snowflake.ID
 		lastChecked int64
