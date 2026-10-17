@@ -352,6 +352,22 @@ body {
     background: #eee;
 }
 
+.button-danger {
+    background: #5c2626;
+    border-color: #7a3434;
+    color: #f2b8b8;
+}
+
+.button-danger:hover {
+    background: #783131;
+    border-color: #914040;
+    color: #ffe0e0;
+}
+
+.button-danger:disabled:hover {
+    background: #5c2626;
+}
+
 /* Editable tables */
 
 .editable-table {

@@ -147,6 +147,10 @@ func RegisterHandlers(mux *http.ServeMux) {
 		http.HandlerFunc(updateSettingsPostHandler),
 		http.HandlerFunc(renderNoPermissionSettingsPostHandler),
 	))
+	mux.Handle("/update/restart", developerMiddleware(
+		http.HandlerFunc(handleRestart),
+		http.HandlerFunc(handleRestartNoPermission),
+	))
 	mux.HandleFunc("/api/overview", overviewHandler)
 	mux.HandleFunc("/", pageHandler)
 }
@@ -353,6 +357,46 @@ func overviewHandler(w http.ResponseWriter, r *http.Request) {
 	); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func handleRestart(w http.ResponseWriter, r *http.Request) {
+	token := os.Getenv("SIBYL_DEPLOY_TOKEN")
+	url := os.Getenv("SIBYL_DEPLOY_URL")
+	if token == "" || url == "" {
+		renderFlashMessage(w, "error", "Deploy token is not configured.")
+		return
+	}
+
+	req, err := http.NewRequestWithContext(
+		r.Context(),
+		http.MethodPost,
+		url,
+		nil,
+	)
+	if err != nil {
+		renderFlashMessage(w, "error", "Failed to create restart request.")
+		return
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		renderFlashMessage(w, "error", "Failed to request bot restart.")
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		renderFlashMessage(w, "error", "Deploy API returned "+resp.Status)
+		return
+	}
+
+	renderFlashMessage(w, "success", "Restarting bot...")
+}
+
+func handleRestartNoPermission(w http.ResponseWriter, r *http.Request) {
+	renderFlashMessage(w, "error", "No permission.")
 }
 
 func logHandler(w http.ResponseWriter, r *http.Request) {

@@ -15,6 +15,10 @@
     {{ template "overview-content" . }}
 </div>
 
+{{ if and .User .User.IsDeveloper }}
+{{ template "restart_button" . }}
+{{ end }}
+
 {{ end }}
 
 
@@ -69,5 +73,22 @@
         <div class="card-value">{{ .Dashboard.RSSFeeds }}</div>
     </div>
 </div>
+
+{{ end }}
+
+{{ define "restart_button" }}
+
+<form id="restart-form"
+      hx-post="/update/restart"
+      hx-swap="none"
+      hx-confirm="Are you sure you want to restart the bot?">
+    <div class="page-actions">
+        <button id="restart-button"
+                class="button button-danger"
+                type="submit">
+            Restart bot
+        </button>
+    </div>
+</form>
 
 {{ end }}
