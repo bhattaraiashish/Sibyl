@@ -13,6 +13,12 @@ import (
 )
 
 func main() {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		AddSource: true,
+	}))
+
+	slog.SetDefault(logger)
+
 	env := flag.String("env", "env.json", "Environment JSON")
 	db := flag.String("db", "sibyl.db", "Database Path")
 	flag.Parse()
