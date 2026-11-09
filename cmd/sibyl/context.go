@@ -387,7 +387,7 @@ func (ctx *BotContext) SyncGuildCommands(
 }
 
 func (ctx *BotContext) InitGuilds() error {
-	guilds, err := ctx.Client.Rest.GetCurrentUserGuilds("", 0, 0, 0, false)
+	guilds, err := ctx.Client.Rest.GetCurrentUserGuilds("", 0, 0, 0, 0, false)
 	if err != nil {
 		return err
 	}
@@ -570,7 +570,7 @@ func (ctx *BotContext) Register(command Command) {
 }
 
 func (ctx *BotContext) UnregisterCommands() {
-	guilds, err := ctx.Client.Rest.GetCurrentUserGuilds("", 0, 0, 0, false)
+	guilds, err := ctx.Client.Rest.GetCurrentUserGuilds("", 0, 0, 0, 0, false)
 	if err != nil {
 		slog.Error(
 			"failed to get guilds",
