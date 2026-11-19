@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 )
 
@@ -113,6 +114,9 @@ func executeQuery[T any](
 		return nil, err
 	}
 	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("AniList returned HTTP %d", res.StatusCode)
+	}
 
 	var reply postReply[T]
 
@@ -122,6 +126,10 @@ func executeQuery[T any](
 
 	if len(reply.Errors) != 0 {
 		return nil, errors.New(reply.Errors[0].Message)
+	}
+
+	if reply.Data == nil {
+		return nil, errors.New("AniList returned empty data")
 	}
 
 	return reply.Data, nil
